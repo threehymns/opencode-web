@@ -1,86 +1,88 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { getProjects, getCurrentProject } from '../services/api'
-import type { Project } from '../services/types'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { getCurrentProject, getProjects } from "../services/api";
+import type { Project } from "../services/types";
 
 interface ProjectState {
-  projects: Project[]
-  currentProject: Project | null
-  isLoadingProjects: boolean
-  isLoadingCurrent: boolean
-  error: string | null
+	projects: Project[];
+	currentProject: Project | null;
+	isLoadingProjects: boolean;
+	isLoadingCurrent: boolean;
+	error: string | null;
 
-  // Actions
-  fetchProjects: () => Promise<void>
-  fetchCurrentProject: () => Promise<void>
-  setCurrentProject: (project: Project) => void
-  clearError: () => void
+	// Actions
+	fetchProjects: () => Promise<void>;
+	fetchCurrentProject: () => Promise<void>;
+	setCurrentProject: (project: Project) => void;
+	clearError: () => void;
 }
 
 export const useProjectStore = create<ProjectState>()(
-  persist(
-    (set, get) => ({
-      projects: [],
-      currentProject: null,
-      isLoadingProjects: false,
-      isLoadingCurrent: false,
-      error: null,
+	persist(
+		(set, get) => ({
+			projects: [],
+			currentProject: null,
+			isLoadingProjects: false,
+			isLoadingCurrent: false,
+			error: null,
 
-      fetchProjects: async () => {
-        const { isLoadingProjects } = get()
+			fetchProjects: async () => {
+				const { isLoadingProjects } = get();
 
-        if (isLoadingProjects) {
-          return
-        }
+				if (isLoadingProjects) {
+					return;
+				}
 
-        set({ isLoadingProjects: true, error: null })
+				set({ isLoadingProjects: true, error: null });
 
-        try {
-          const projects = await getProjects()
-          set({ projects, isLoadingProjects: false })
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          set({
-            error: `Failed to load projects - ${errorMessage}`,
-            isLoadingProjects: false
-          })
-        }
-      },
+				try {
+					const projects = await getProjects();
+					set({ projects, isLoadingProjects: false });
+				} catch (error) {
+					const errorMessage =
+						error instanceof Error ? error.message : "Unknown error";
+					set({
+						error: `Failed to load projects - ${errorMessage}`,
+						isLoadingProjects: false,
+					});
+				}
+			},
 
-      fetchCurrentProject: async () => {
-        const { isLoadingCurrent } = get()
+			fetchCurrentProject: async () => {
+				const { isLoadingCurrent } = get();
 
-        if (isLoadingCurrent) {
-          return
-        }
+				if (isLoadingCurrent) {
+					return;
+				}
 
-        set({ isLoadingCurrent: true, error: null })
+				set({ isLoadingCurrent: true, error: null });
 
-        try {
-          const currentProject = await getCurrentProject()
-          set({ currentProject, isLoadingCurrent: false })
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          set({
-            error: `Failed to load current project - ${errorMessage}`,
-            isLoadingCurrent: false
-          })
-        }
-      },
+				try {
+					const currentProject = await getCurrentProject();
+					set({ currentProject, isLoadingCurrent: false });
+				} catch (error) {
+					const errorMessage =
+						error instanceof Error ? error.message : "Unknown error";
+					set({
+						error: `Failed to load current project - ${errorMessage}`,
+						isLoadingCurrent: false,
+					});
+				}
+			},
 
-      setCurrentProject: (project: Project) => {
-        set({ currentProject: project })
-      },
+			setCurrentProject: (project: Project) => {
+				set({ currentProject: project });
+			},
 
-      clearError: () => {
-        set({ error: null })
-      }
-    }),
-    {
-      name: 'opencode-project-state',
-      partialize: (state) => ({
-        currentProject: state.currentProject
-      })
-    }
-  )
-)
+			clearError: () => {
+				set({ error: null });
+			},
+		}),
+		{
+			name: "opencode-project-state",
+			partialize: (state) => ({
+				currentProject: state.currentProject,
+			}),
+		},
+	),
+);
