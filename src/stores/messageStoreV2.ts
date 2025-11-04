@@ -1,61 +1,7 @@
 import { create } from 'zustand'
+import type { Message, Part } from '@opencode-ai/sdk'
 
-// API-aligned types from OpenAPI spec
-interface Message {
-  id: string
-  sessionID: string
-  role: 'user' | 'assistant'
-  time: {
-    created: number
-    completed?: number
-  }
-  // Assistant-specific fields
-  error?: any
-  system?: string[]
-  modelID?: string
-  providerID?: string
-  path?: {
-    cwd: string
-    root: string
-  }
-  summary?: boolean
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-}
-
-interface Part {
-  id: string
-  sessionID: string
-  messageID: string
-  type: 'text' | 'file' | 'tool' | 'step-start' | 'step-finish'
-  // Type-specific fields will be added based on part type
-  text?: string
-  synthetic?: boolean
-  time?: {
-    start: number
-    end?: number
-  }
-  // Tool-specific fields
-  callID?: string
-  tool?: string
-  state?: any
-  // File-specific fields
-  mime?: string
-  filename?: string
-  url?: string
-  // Step-specific fields
-  cost?: number
-  tokens?: any
-}
-
+// SDK-aligned types
 interface MessageWithParts {
   info: Message
   parts: Part[]
@@ -63,17 +9,18 @@ interface MessageWithParts {
 
 interface MessageStoreV2State {
   messages: MessageWithParts[]
-  
+
   // Session management
   hydrateFromSession: (messages: MessageWithParts[]) => void
-  
+
   // Event stream handlers
   handleMessageUpdated: (info: Message) => void
   handlePartUpdated: (part: Part) => void
   handleMessageRemoved: (messageId: string) => void
-  
+
   // User actions
-  addUserMessage: (content: string, messageId: string) => void
+  addUserMessage: (content: string, messageId: string, sessionId: string) => void
+  addAssistantMessage: (messageWithParts: MessageWithParts) => void
   clearMessages: () => void
 }
 
@@ -128,27 +75,43 @@ export const useMessageStoreV2 = create<MessageStoreV2State>((set) => ({
     }))
   },
   
-  addUserMessage: (content: string, messageId: string) => {
+  addUserMessage: (content: string, messageId: string, sessionId: string) => {
     const userMessage: MessageWithParts = {
       info: {
         id: messageId,
-        sessionID: '', // Will be set by caller
+        sessionID: sessionId,
         role: 'user',
         time: { created: Date.now() }
       },
       parts: [{
         id: `${messageId}-text`,
-        sessionID: '',
+        sessionID: sessionId,
         messageID: messageId,
         type: 'text',
         text: content,
         time: { start: Date.now() }
       }]
     }
-    
+
     set((state) => ({
       messages: [...state.messages, userMessage]
     }))
+  },
+
+  addAssistantMessage: (messageWithParts: MessageWithParts) => {
+    set((state) => {
+      // Check if message already exists
+      const existingIndex = state.messages.findIndex(msg => msg.info.id === messageWithParts.info.id)
+      if (existingIndex >= 0) {
+        // Update existing message
+        const updatedMessages = [...state.messages]
+        updatedMessages[existingIndex] = messageWithParts
+        return { messages: updatedMessages }
+      } else {
+        // Add new message
+        return { messages: [...state.messages, messageWithParts] }
+      }
+    })
   },
   
   clearMessages: () => {

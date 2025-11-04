@@ -63,7 +63,7 @@ src/
 - **TypeScript 5.8** - Strict type checking
 - **Vite 7** - Fast build tool and dev server
 - **CSS Modules** or **Styled Components** - Component styling
-- **EventSource API** - Server-sent events for streaming
+- **SDK event subscription** - Server-sent events for streaming
 
 ### State Management
 - **React useState/useReducer** - Local component state
@@ -77,72 +77,63 @@ src/
 
 ## API Specification
 
-### Core Endpoints
+### SDK Methods
 
 #### Get Session Messages
 ```typescript
-GET /session/{id}/message
+client.session.messages({ path: { id: string } })
 
-// Path Parameters
-id: string;             // Session ID
+// Parameters
+path: { id: string }    // Session ID
 
-// Response: 200 OK
-Message[]               // Array of messages in the session
+// Response
+{ info: Message, parts: Part[] }[]  // Array of messages with parts
 ```
 
 #### Initialize Session
 ```typescript
-POST /session/{id}/init
+client.session.init({ path: { id: string }, body: object })
 
-// Path Parameters
-id: string;             // Session ID
+// Parameters
+path: { id: string }    // Session ID
+body: object           // Initialization options
 
-// Response: 200 OK
-// Session initialization response
+// Response
+boolean                // Initialization success status
 ```
 
 #### Create Session
 ```typescript
-POST /session
-Content-Type: application/json
+client.session.create({ body: object })
 
-// Request Body: None
+// Parameters
+body: { title?: string }  // Optional session title
 
-// Response: 200 OK
-{
-  id: string;           // Session ID (starts with "ses")
-  title: string;        // Session title
-  version: string;      // API version
-  time: {
-    created: number;    // Unix timestamp
-    updated: number;    // Unix timestamp
-  };
-}
+// Response
+Session                 // Session object with id, title, version, time
 ```
 
 #### Get App Info
 ```typescript
-GET /app
+client.app.info()
 
-// Response: 200 OK
-{
-  // App information schema
-}
+// Response
+object                 // App information
 ```
 
 #### Initialize App
 ```typescript
-POST /app/init
+client.app.init()
 
-// Response: 200 OK
-boolean  // Initialization success status
+// Response
+boolean                // Initialization success status
 ```
 
 #### Get Config (Providers and Models)
 ```typescript
-GET /config
+client.config.providers()
 
-// Response: 200 OK
+// Response
 {
   providers: Provider[];
   default: Record<string, string>;  // Default provider/model mapping
@@ -178,19 +169,19 @@ interface Model {
 
 #### Send Message
 ```typescript
-POST /session/{id}/message
-Content-Type: application/json
+client.session.prompt({ path: { id: string }, body: object })
 
-// Path Parameters
-id: string;             // Session ID
-
-// Request Body
-{
-  providerID: string;   // Provider ID (e.g., "anthropic")
-  modelID: string;      // Model ID (e.g., "claude-3-5-sonnet-20241022")
-  mode: string;         // Interaction mode (e.g., "build", "plan", or custom mode)
-  parts: MessagePart[]; // Message content
+// Parameters
+path: { id: string }    // Session ID
+body: {
+  model: { providerID: string, modelID: string };  // Provider and model
+  parts: Part[];        // Message content parts
+  noReply?: boolean;    // Optional: don't trigger AI response
 }
+
+// Response
+{ info: Message, parts: Part[] }  // Assistant message with parts
+```
 
 interface UserMessagePart {
   type: 'text' | 'file';
@@ -254,32 +245,30 @@ interface ToolMetadata {
 }
 ```
 
-#### Event Stream (Server-Sent Events)
+#### Event Stream (SDK events)
 ```typescript
-GET /event
-Accept: text/event-stream
+client.event.subscribe()
 
-// Response: 200 OK (streaming)
-// Content-Type: text/event-stream
+// Response: AsyncIterable<Event>
 
 // Event Types:
-data: {
+{
   type: 'message.updated';
   properties: {
     info: Message;      // Complete message object
   };
 }
 
-data: {
+{
   type: 'message.part.updated';
   properties: {
-    part: MessagePart;  // Updated message part
+    part: Part;         // Updated message part
     sessionID: string;
     messageID: string;
   };
 }
 
-data: {
+{
   type: 'message.removed';
   properties: {
     sessionID: string;
@@ -287,41 +276,21 @@ data: {
   };
 }
 
-data: {
+{
   type: 'session.updated';
   properties: {
     session: Session;   // Updated session object
   };
 }
 
-data: {
+{
   type: 'session.deleted';
   properties: {
     sessionID: string;
   };
 }
 
-data: {
-  type: 'session.error';
-  properties: {
-    error: {
-      name: 'ProviderAuthError' | 'UnknownError' | 'MessageOutputLengthError';
-      data: {
-        message: string;
-        providerID?: string;
-      };
-    };
-  };
-}
-
-data: {
-  type: 'session.idle';
-  properties: {
-    sessionID: string;
-  };
-}
-
-data: {
+{
   type: 'file.edited';
   properties: {
     path: string;
@@ -329,7 +298,7 @@ data: {
   };
 }
 
-data: {
+{
   type: 'file.watcher.updated';
   properties: {
     path: string;
@@ -337,7 +306,7 @@ data: {
   };
 }
 
-data: {
+{
   type: 'storage.write';
   properties: {
     key: string;
@@ -345,7 +314,7 @@ data: {
   };
 }
 
-data: {
+{
   type: 'permission.updated';
   properties: {
     permission: string;
@@ -353,7 +322,7 @@ data: {
   };
 }
 
-data: {
+{
   type: 'installation.updated';
   properties: {
     package: string;
@@ -361,7 +330,7 @@ data: {
   };
 }
 
-data: {
+{
   type: 'lsp.client.diagnostics';
   properties: {
     uri: string;
@@ -426,42 +395,50 @@ interface ToolState {
 }
 ```
 
-### API Integration
+### SDK Integration
 
 #### Session Lifecycle
 ```typescript
+import { createOpencode } from "@opencode-ai/sdk"
+const { client } = await createOpencode()
+
 // 1. App initialization
-await api.initializeApp()
-const session = await api.createSession()
-await api.initializeSession(session.id)
+await client.app.init()
+const session = await client.session.create({ body: { title: "Chat Session" } })
+await client.session.init({ path: { id: session.id } })
 
 // 2. Send message
-const message = await api.sendMessage(session.id, {
-  providerID: 'anthropic',
-  modelID: 'claude-3-5-sonnet-20241022',
-  mode: 'build',  // Available modes: "build", "plan", or custom modes
-  parts: [{ type: 'text', text: userInput }]
+const message = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: 'anthropic', modelID: 'claude-3-5-sonnet-20241022' },
+    parts: [{ type: 'text', text: userInput }]
+  }
 })
 
-// 3. Stream response
-const eventSource = new EventSource(`/event`)
-eventSource.onmessage = (event) => {
-  const data = JSON.parse(event.data)
-  // Handle message updates
+// 3. Stream events
+for await (const event of client.event.subscribe()) {
+  switch (event.type) {
+    case 'message.updated':
+      // Handle message updates
+      break
+    case 'message.part.updated':
+      // Handle part updates
+      break
+  }
 }
 ```
 
 ### Error Handling
 ```typescript
-// HTTP Error Responses
-interface ApiError {
-  data: Record<string, any>;
+// SDK Error Handling
+try {
+  await client.session.prompt({ path: { id: sessionId }, body: messageBody })
+} catch (error) {
+  console.error("Failed to send message:", (error as Error).message)
 }
 
-// 400 Bad Request - Invalid request data
-// 500 Internal Server Error - Server error
-
-// Event Stream Errors
+// Error Types
 interface ProviderAuthError {
   name: 'ProviderAuthError';
   data: {
@@ -480,8 +457,11 @@ interface UnknownError {
 
 ## Data Models
 
-### Core Types
+### SDK Types
 ```typescript
+import type { Session, Message, Part, Provider, Model } from "@opencode-ai/sdk"
+
+// Core types are imported from the SDK
 interface Session {
   id: string
   title: string
@@ -494,14 +474,18 @@ interface Session {
 
 interface Message {
   id: string
+  sessionID: string
   role: 'user' | 'assistant'
-  parts: MessagePart[]
-  metadata: MessageMetadata
+  time: { created: number; completed?: number }
+  // Additional fields for assistant messages
 }
 
-interface MessagePart {
-  type: 'text' | 'tool-invocation' | 'reasoning' | 'file' | 'source-url' | 'step-start'
-  // ... type-specific properties
+interface Part {
+  id: string
+  sessionID: string
+  messageID: string
+  type: 'text' | 'file' | 'tool' | 'step-start' | 'step-finish'
+  // Type-specific properties
 }
 
 interface Provider {
@@ -630,39 +614,38 @@ interface CollapsibleToolResultProps {
 
 ## Real-time Communication
 
-### EventSource Implementation
+### Event Stream Implementation
 ```typescript
-class EventStreamService {
-  private eventSource: EventSource | null = null
-  private listeners: Map<string, Function[]> = new Map()
+// Using SDK event subscription
+const { client } = await createOpencode()
 
-  connect(url: string) {
-    this.eventSource = new EventSource(url)
-    this.eventSource.onmessage = this.handleMessage
-    this.eventSource.onerror = this.handleError
-  }
-
-  subscribe(eventType: string, callback: Function) {
-    // Add event listener
-  }
-
-  disconnect() {
-    this.eventSource?.close()
+// Subscribe to real-time events
+for await (const event of client.event.subscribe()) {
+  switch (event.type) {
+    case 'message.updated':
+      handleMessageUpdate(event.properties.info)
+      break
+    case 'message.part.updated':
+      handlePartUpdate(event.properties.part)
+      break
+    case 'message.removed':
+      handleMessageRemoval(event.properties.messageID)
+      break
   }
 }
 ```
 
 ### Message Streaming Flow
 1. User sends message → optimistic UI update
-2. API call to POST /session/{id}/message
-3. EventSource receives message.updated events
+2. SDK call to client.session.prompt()
+3. SDK event stream receives message.updated events
 4. UI updates with streaming message parts
 5. Final message.updated event marks completion
 
 ### Message Part Flow Pattern
-Based on observed API responses, messages typically follow this pattern:
+Based on SDK event responses, messages typically follow this pattern:
 ```
-step-start → action (text/tool-invocation) → step-start → action → ...
+step-start → action (text/tool) → step-start → action → ...
 ```
 
 **Simple Text Response:**
@@ -672,7 +655,7 @@ step-start → text
 
 **Multi-step Tool Response:**
 ```
-step-start → tool-invocation (read) → step-start → tool-invocation (edit) → step-start → text
+step-start → tool (read) → step-start → tool (edit) → step-start → text
 ```
 
 ### Tool Execution Display
@@ -756,6 +739,9 @@ interface ErrorBoundary {
 
 ### Local Development
 ```bash
+# Install SDK
+npm install @opencode-ai/sdk
+
 # Start development server
 npm run dev
 
@@ -766,14 +752,16 @@ npm run build
 npm run lint
 ```
 
-### Environment Configuration
+### SDK Configuration
 ```typescript
-interface Config {
-  API_BASE_URL: string
-  DEFAULT_PROVIDER: string
-  DEFAULT_MODEL: string
-  EVENT_STREAM_URL: string
-}
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode({
+  baseUrl: "http://localhost:4096",  // Server URL
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022"
+  }
+})
 ```
 
 ### Testing Strategy

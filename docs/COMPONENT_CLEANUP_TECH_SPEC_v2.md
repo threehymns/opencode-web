@@ -195,7 +195,7 @@ export const SettingsPanel = ({ selectedMode, onModeChange, disabled }: Settings
 
 ```typescript
 export const useEventStream = (sessionId: string | null) => {
-  // EventSource connection management
+  // SDK client connection management
   // Event subscriptions
   // Cleanup logic
   // Return connection state and handlers

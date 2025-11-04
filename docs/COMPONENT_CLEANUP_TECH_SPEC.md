@@ -135,7 +135,7 @@ export const useEventStream = () => {
 ```
 
 **Responsibilities**:
-- EventSource connection management
+- SDK client connection management
 - Event subscription/unsubscription
 - Reconnection logic
 - Error handling

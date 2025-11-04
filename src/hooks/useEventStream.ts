@@ -1,106 +1,116 @@
-import { useEffect, useMemo, useCallback, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createEventStream } from '../services/eventStream'
-import type { Message, AssistantMessagePart, MessageMetadata, MessageUpdatedProperties, MessagePartUpdatedProperties, SessionErrorProperties } from '../services/types'
-import { getOverallToolStatus, getContextualToolStatus, hasActiveToolExecution, getToolProgress } from '../utils/toolStatusHelpers'
 import { useSessionStore } from '../stores/sessionStore'
-import { useMessageStore } from '../stores/messageStore'
+import { useMessageStoreV2 } from '../stores/messageStoreV2'
 import { logger } from '../lib/logger'
+import type { Message, Part } from '@opencode-ai/sdk/client'
 
 export function useEventStream() {
   const [hasReceivedFirstEvent, setHasReceivedFirstEvent] = useState(false)
-  const [currentMessageMetadata, setCurrentMessageMetadata] = useState<MessageMetadata | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(false)
-  
-  const eventStream = useMemo(() => createEventStream(), [])
-  const { sessionId, setIdle } = useSessionStore()
-  const { 
-    addStatusMessage, 
-    addTextMessage, 
-    addErrorMessage, 
-    removeLastEventMessage, 
-    setLastStatusMessage 
-  } = useMessageStore()
 
-  const updateStatusFromMessage = useCallback((message: Message) => {
-    if (!hasReceivedFirstEvent) {
-      setHasReceivedFirstEvent(true)
-    }
-    
-    setCurrentMessageMetadata(message.metadata)
-    
-    if (message.metadata?.time?.completed) {
-      setIsLoading(false)
-      return
-    }
 
-    if (hasActiveToolExecution(message)) {
-      const status = getOverallToolStatus(message.parts || [])
-      addStatusMessage(status)
-    } else {
-      const progress = getToolProgress(message)
-      if (progress.total > 0) {
-        addStatusMessage(`✓ Completed ${progress.total} tool${progress.total > 1 ? 's' : ''}`)
-      }
-      // Don't show "Generating response..." - text parts will indicate response generation
-    }
-  }, [hasReceivedFirstEvent, addStatusMessage])
-
-  const updateStatusFromPart = useCallback((part: AssistantMessagePart, messageId: string, messageMetadata?: MessageMetadata) => {
-    if (!hasReceivedFirstEvent) {
-      setHasReceivedFirstEvent(true)
-    }
-
-    if (part.type === 'tool' && part.state) {
-      const status = getContextualToolStatus(part, messageMetadata)
-      addStatusMessage(status)
-      
-      if (part.state.status === 'completed') {
-        // Don't add "Generating response..." status as text parts will arrive immediately
-        // and the presence of text indicates response generation
-      }
-    } else if (part.type === 'text') {
-      if (part.text && part.text.trim()) {
-        // Debug: Log text parts to help identify the echo issue
-        logger.debug('Received text part:', { messageId, text: part.text.substring(0, 100) + (part.text.length > 100 ? '...' : '') })
-        addTextMessage(part.text, messageId)
-      }
-    } else if (part.type === 'step-start') {
-      // TODO: Handle step-start differently - commented out for now
-      // if (hasReceivedFirstEvent) {
-      //   addStatusMessage('Processing next step...')
-      // }
-    }
-  }, [hasReceivedFirstEvent, isLoading, addStatusMessage, addTextMessage])
+  const eventStream = useMemo(() => createEventStream(), []) // Persistent event stream
+  const {
+    handleMessageUpdated,
+    handlePartUpdated,
+    handleMessageRemoved
+  } = useMessageStoreV2()
 
   useEffect(() => {
-    eventStream.connect()
-    
-    eventStream.subscribe('message.updated', (data: MessageUpdatedProperties) => {
-      updateStatusFromMessage(data.info)
-    })
-    
-    eventStream.subscribe('message.part.updated', (data: MessagePartUpdatedProperties) => {
-      updateStatusFromPart(data.part, data.messageID, currentMessageMetadata)
-    })
-    
-    eventStream.subscribe('session.error', (data: SessionErrorProperties) => {
-      logger.error('Session error:', data)
-      addErrorMessage(data.error.data.message)
-    })
+    const connectAndSubscribe = async () => {
+      await eventStream.connect()
 
-    eventStream.subscribe('session.idle', (data: { sessionID: string }) => {
-      if (data.sessionID === sessionId) {
-        setIdle(true)
-        setIsLoading(false)
-        removeLastEventMessage()
-        setLastStatusMessage('')
-      }
-    })
-    
+        eventStream.subscribe('message.updated', (data: Record<string, unknown>) => {
+          if (!hasReceivedFirstEvent) {
+            setHasReceivedFirstEvent(true)
+          }
+
+          // Type guard for message update event
+          const isMessageUpdate = (d: Record<string, unknown>): d is { info: Message } => {
+            return typeof d.info === 'object' && d.info !== null
+          }
+
+          if (isMessageUpdate(data)) {
+            // Get current session dynamically to avoid stale closure
+            const { currentSession: activeSession } = useSessionStore.getState()
+            if (data.info.sessionID === activeSession?.id) {
+              // Update messageStoreV2 with the new message
+              handleMessageUpdated(data.info)
+
+              // Check if message is completed
+              const info = data.info as Record<string, unknown>
+              const time = info.time
+              if (time && typeof time === 'object' && 'completed' in (time as Record<string, unknown>) && (time as { completed?: boolean }).completed) {
+                setIsLoading(false)
+              }
+            }
+          }
+        })
+
+        eventStream.subscribe('message.part.updated', (data: Record<string, unknown>) => {
+          if (!hasReceivedFirstEvent) {
+            setHasReceivedFirstEvent(true)
+          }
+
+          // Type guard for part update event
+          const isPartUpdate = (d: Record<string, unknown>): d is { part: Part } => {
+            return typeof d.part === 'object' && d.part !== null
+          }
+
+          if (isPartUpdate(data)) {
+            // Get current session dynamically to avoid stale closure
+            const { currentSession: activeSession } = useSessionStore.getState()
+            if (data.part.sessionID === activeSession?.id) {
+              // Update messageStoreV2 with the new part
+              handlePartUpdated(data.part)
+            }
+          }
+        })
+
+        eventStream.subscribe('message.removed', (data: Record<string, unknown>) => {
+          const isMessageRemoved = (d: Record<string, unknown>): d is { messageID: string } => {
+            return typeof d.messageID === 'string'
+          }
+
+          if (isMessageRemoved(data)) {
+            // Get current session dynamically
+            const { currentSession: activeSession } = useSessionStore.getState()
+            // Find the message to check its sessionID
+            const { messages } = useMessageStoreV2.getState()
+            const message = messages.find(msg => msg.info.id === data.messageID)
+            if (message && message.info.sessionID === activeSession?.id) {
+              handleMessageRemoved(data.messageID)
+            }
+          }
+        })
+
+      eventStream.subscribe('session.error', (data: Record<string, unknown>) => {
+        logger.error('Session error:', data)
+      })
+
+       eventStream.subscribe('session.idle', (data: Record<string, unknown>) => {
+         const isSessionIdle = (d: Record<string, unknown>): d is { sessionID: string } => {
+           return typeof d.sessionID === 'string'
+         }
+
+         if (isSessionIdle(data)) {
+           // Get current session dynamically
+           const { currentSession: activeSession } = useSessionStore.getState()
+           if (data.sessionID === activeSession?.id) {
+             // Note: setIdle removed from new sessionStore
+             setIsLoading(false)
+           }
+         }
+       })
+    }
+
+    connectAndSubscribe()
+
     return () => {
       eventStream.disconnect()
     }
-  }, [eventStream, updateStatusFromMessage, updateStatusFromPart, currentMessageMetadata, sessionId, setIdle, addErrorMessage, removeLastEventMessage, setLastStatusMessage])
+  }, [eventStream, handleMessageUpdated, handlePartUpdated, handleMessageRemoved, hasReceivedFirstEvent])
 
   return {
     hasReceivedFirstEvent,

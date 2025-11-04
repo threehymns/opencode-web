@@ -1,249 +1,96 @@
-// Utility functions for tool status display
+// Simplified tool status helpers for SDK compatibility
 
-import type { ToolPart, MessageMetadata, AssistantMessagePart } from '../services/types'
-import { isTodoArgs } from '../services/types'
+import type { Part } from '@opencode-ai/sdk'
 
-// Get pending action message for tool (matches TUI spec)
+// Get pending action message for tool
 export const getToolActionMessage = (toolName: string): string => {
   const actionMessages: Record<string, string> = {
-    'task': 'Searching...',
-    'bash': 'Writing command...',
-    'edit': 'Preparing edit...',
-    'webfetch': 'Fetching from the web...',
-    'glob': 'Finding files...',
-    'grep': 'Searching content...',
-    'list': 'Listing directory...',
     'read': 'Reading file...',
-    'write': 'Preparing write...',
-    'todowrite': 'Planning...',
-    'todoread': 'Planning...',
-    'patch': 'Preparing patch...'
+    'write': 'Writing file...',
+    'edit': 'Editing file...',
+    'bash': 'Running command...',
+    'webfetch': 'Fetching URL...',
+    'glob': 'Searching files...',
+    'grep': 'Searching text...',
+    'todowrite': 'Updating tasks...',
+    'todoread': 'Reading tasks...'
   }
-  
   return actionMessages[toolName] || 'Working...'
 }
 
-// Get normalized tool name for display (matches TUI spec)
+// Get display name for tool
 export const getToolDisplayName = (toolName: string): string => {
-  // Handle MCP tools
-  if (toolName.startsWith('mcp_') || toolName.startsWith('localmcp_')) {
-    const cleanName = toolName.replace(/^(local)?mcp_/, '')
-    return cleanName.split('_').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ')
-  }
-  
-  // Handle specific tool name mappings
-  const toolNames: Record<string, string> = {
+  const displayNames: Record<string, string> = {
+    'read': 'Read',
+    'write': 'Write',
+    'edit': 'Edit',
+    'bash': 'Run',
     'webfetch': 'Fetch',
-    'todowrite': 'Plan',
-    'todoread': 'Plan'
+    'glob': 'Search',
+    'grep': 'Find',
+    'todowrite': 'Tasks',
+    'todoread': 'Tasks'
   }
-  
-  if (toolNames[toolName]) {
-    return toolNames[toolName]
-  }
-  
-  // Default: title case the tool name
-  return toolName.charAt(0).toUpperCase() + toolName.slice(1)
+  return displayNames[toolName] || toolName
 }
 
-// Get status message for tool state (matches TUI spec)
-export const getToolStatusMessage = (toolName: string, state: string): string => {
-  switch (state) {
-    case 'pending':
-      return getToolActionMessage(toolName)
-    case 'running':
-      // For running state, we'll use display name for now
-      // TODO: Add contextual info like file paths
-      return getToolDisplayName(toolName)
-    case 'completed':
-      return `✓ ${getToolDisplayName(toolName)} completed`
-    case 'error':
-      return `✗ ${getToolDisplayName(toolName)} failed`
-    default:
-      return getToolActionMessage(toolName)
+// Simplified tool status functions
+export const getOverallToolStatus = (parts: Part[]): string => {
+  const toolParts = parts.filter((part) => part.type === 'tool')
+  if (toolParts.length === 0) return 'Processing...'
+
+  const activeTools = toolParts.filter((part) => {
+    const partObj = part as Record<string, unknown>
+    const state = partObj.state
+    return !state || typeof state !== 'object' || (state as { status?: string }).status !== 'completed'
+  })
+  if (activeTools.length > 0) {
+    const toolPart = activeTools[0] as Record<string, unknown>
+    const tool = toolPart.tool
+    return getToolActionMessage(tool as string)
   }
+
+  return 'Completed'
 }
 
-// Get overall status for multiple tools
-export const getOverallToolStatus = (toolParts: AssistantMessagePart[]): string => {
-  if (toolParts.length === 0) return ''
-  
-  // Filter for actual tool parts
-  const actualToolParts = toolParts.filter((part): part is ToolPart => part.type === 'tool')
-  
-  if (actualToolParts.length === 0) return ''
-  
-  // Check for active tool
-  const activeTool = actualToolParts.find(part => 
-    part.state?.status !== 'completed'
-  )
-  
-  if (activeTool) {
-    return getToolStatusMessage(
-      activeTool.tool, 
-      activeTool.state?.status || 'pending'
-    )
-  }
-  
-  // Count completed tools
-  const completedCount = actualToolParts.filter(part => 
-    part.state?.status === 'completed'
-  ).length
-  
-  if (completedCount > 0) {
-    return `✓ Completed ${completedCount} tool${completedCount > 1 ? 's' : ''}`
-  }
-  
-  // Only show "Processing tools..." if we have tools that aren't completed yet
-  if (actualToolParts.length > 0) {
-    return 'Processing tools...'
-  }
-  
-  return ''
+export const hasActiveToolExecution = (_info: Record<string, unknown>, parts: Part[]): boolean => {
+  return parts.some((part) => {
+    if (part.type !== 'tool') return false
+    const partObj = part as Record<string, unknown>
+    const state = partObj.state
+    return !state || typeof state !== 'object' || (state as { status?: string }).status !== 'completed'
+  })
 }
 
-// Check if message has active tool execution
-export const hasActiveToolExecution = (message: { parts?: AssistantMessagePart[]; metadata?: { time?: { completed?: number } } }): boolean => {
-  if (!message?.parts) return false
-  
-  // If message is completed, no tools are actively executing
-  if (message.metadata?.time?.completed) return false
-  
-  return message.parts.some((part: AssistantMessagePart) => 
-    part.type === 'tool' && 
-    (part as ToolPart).state?.status !== 'completed'
-  )
+export const getToolProgress = (parts: Part[]): { current: number; total: number } => {
+  const toolParts = parts.filter((part) => part.type === 'tool')
+  const completed = toolParts.filter((part) => {
+    const partObj = part as Record<string, unknown>
+    const state = partObj.state
+    return state && typeof state === 'object' && (state as { status?: string }).status === 'completed'
+  }).length
+  return { current: completed, total: toolParts.length }
 }
 
-// Get progress information for tools
-export const getToolProgress = (message: { parts?: AssistantMessagePart[] }): { current: number; total: number } => {
-  if (!message?.parts) return { current: 0, total: 0 }
-  
-  const toolParts = message.parts.filter((part): part is ToolPart => part.type === 'tool')
-  const completedParts = toolParts.filter((part) => part.state?.status === 'completed')
-  
-  return {
-    current: completedParts.length,
-    total: toolParts.length
-  }
-}
+export const getContextualToolStatus = (part: Part): string => {
+  if (part.type === 'tool') {
+    const partObj = part as Record<string, unknown>
+    const state = partObj.state
+    if (state && typeof state === 'object') {
+      const status = (state as { status?: string }).status
+      const tool = partObj.tool
 
-// Extract file path from tool args safely
-const extractFilePath = (args?: Record<string, unknown>): string | undefined => {
-  return args?.filePath as string | undefined
-}
-
-// Get relative path for display
-const getRelativePath = (
-  filePath?: string,
-  serverCwd?: string
-): string => {
-  if (!filePath) return 'file'
-  
-  // If no server cwd, just return filename
-  if (!serverCwd) {
-    return filePath.split('/').pop() || filePath
-  }
-  
-  // Convert absolute to relative if possible
-  if (filePath.startsWith(serverCwd)) {
-    const relativePath = filePath.slice(serverCwd.length + 1)
-    return relativePath || filePath
-  }
-  
-  // Fallback to filename
-  return filePath.split('/').pop() || filePath
-}
-
-// Get todo phase based on todo state
-const getTodoPhase = (args?: Record<string, unknown>): string => {
-  if (!isTodoArgs(args)) {
-    return 'Plan'
-  }
-  
-  const todos = args.todos
-  
-  // Find active todo
-  const activeTodo = todos.find(todo => todo.status === 'in_progress')
-  if (activeTodo) {
-    return `Working on: ${activeTodo.content}`
-  }
-  
-  // Check completion ratio
-  const completed = todos.filter(todo => todo.status === 'completed').length
-  if (completed > 0 && completed < todos.length) {
-    return `Completed: ${completed}/${todos.length}`
-  }
-  
-  return 'Plan'
-}
-
-// Get contextual tool title based on args and server context
-const getToolTitle = (
-  toolName: string,
-  args?: Record<string, unknown>,
-  serverCwd?: string
-): string => {
-  switch (toolName) {
-    case 'read':
-    case 'edit':
-    case 'write': {
-      const filePath = extractFilePath(args)
-      const relativePath = getRelativePath(filePath, serverCwd)
-      return `${getToolDisplayName(toolName)} ${relativePath}`
-    }
-    
-    case 'bash': {
-      const description = args?.description as string
-      return `Bash ${description || 'command'}`
-    }
-    
-    case 'webfetch': {
-      const url = args?.url as string
-      if (url) {
-        try {
-          const urlObj = new URL(url)
-          return `Fetch ${urlObj.hostname}`
-        } catch {
-          return `Fetch ${url}`
-        }
+      if (status === 'pending') {
+        return getToolActionMessage(tool as string)
+      } else if (status === 'running') {
+        return `${getToolDisplayName(tool as string)}...`
+      } else if (status === 'completed') {
+        return `✓ ${getToolDisplayName(tool as string)} completed`
+      } else if (status === 'error') {
+        return `❌ ${getToolDisplayName(tool as string)} failed`
       }
-      return 'Fetch URL'
     }
-    
-    case 'todowrite': {
-      return getTodoPhase(args)
-    }
-    
-    default:
-      return getToolDisplayName(toolName)
   }
-}
 
-// New contextual status function with path utilities
-export const getContextualToolStatus = (
-  toolPart: ToolPart,
-  messageMetadata?: MessageMetadata
-): string => {
-  const toolName = toolPart.tool
-  const state = toolPart.state.status
-  const args = toolPart.state.status !== 'pending' ? toolPart.state.args : undefined
-  const serverCwd = messageMetadata?.assistant?.path?.cwd
-  
-  switch (state) {
-    case 'pending':
-      return getToolActionMessage(toolName)
-    case 'running':
-      return getToolTitle(toolName, args, serverCwd)
-    case 'completed':
-      return `✓ ${getToolDisplayName(toolName)} completed`  // Simple for now
-    case 'error': {
-      const errorState = toolPart.state as { status: 'error'; error?: string }
-      return `${getToolDisplayName(toolName)}: ${errorState.error || 'Error'}`
-    }
-    default:
-      return getToolActionMessage(toolName)
-  }
+  return 'Processing...'
 }

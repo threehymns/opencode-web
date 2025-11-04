@@ -1,131 +1,198 @@
+import { createOpencodeClient } from '@opencode-ai/sdk/client'
+import type { Session, AssistantMessage, Part, Project, Message } from '@opencode-ai/sdk/client'
 import type {
-  Session,
   ProvidersResponse,
-  Message,
   SendMessageRequest,
   AppError
 } from './types'
-import { retryRequest, withTimeout } from '../utils/apiHelpers'
-import { API_CONFIG } from '../utils/constants'
 
-// Configuration
-const API_BASE_URL = API_CONFIG.BASE_URL
+// SDK client instance
+let client: Awaited<ReturnType<typeof createOpencodeClient>> | null = null
 
-// Utility function to create AppError from response
-const createAppError = async (response: Response): Promise<AppError> => {
-  let errorData: Record<string, unknown> = {}
-  
-  try {
-    errorData = await response.json()
-  } catch {
-    // If JSON parsing fails, use response text
-    errorData = { message: response.statusText }
+// Initialize SDK client
+const initializeClient = async () => {
+  if (!client) {
+    client = createOpencodeClient({
+      baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:4096'
+    })
   }
-
-  const message = typeof errorData.message === 'string' ? errorData.message : `HTTP ${response.status}`
-  const error = new Error(message) as AppError
-  error.statusCode = response.status
-  error.code = typeof errorData.code === 'string' ? errorData.code : undefined
-  error.data = errorData
-  
-  return error
+  return client
 }
 
-// Generic fetch wrapper with error handling, timeout, and retry
-const apiRequest = async <T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> => {
-  const url = `${API_BASE_URL}${endpoint}`
-  
-  const defaultOptions: RequestInit = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers
-    }
+// Convert SDK errors to AppError format
+const createAppError = (error: unknown): AppError => {
+  const isErrorLike = (err: unknown): err is { message?: string; status?: number; code?: string } => {
+    return typeof err === 'object' && err !== null
   }
 
-  const makeRequest = async (): Promise<T> => {
-    const response = await fetch(url, { ...defaultOptions, ...options })
-
-    if (!response.ok) {
-      throw await createAppError(response)
-    }
-
-    return response.json()
-  }
-
-  // Apply timeout and retry logic
-  return retryRequest(() => withTimeout(makeRequest(), API_CONFIG.TIMEOUT))
+  const message = isErrorLike(error) && error.message ? error.message : 'Unknown error'
+  const appError = new Error(message) as AppError
+  appError.statusCode = isErrorLike(error) && error.status ? error.status : 500
+  appError.code = isErrorLike(error) && error.code ? error.code : undefined
+  appError.data = error
+  return appError
 }
 
 // Session Management
-export const createSession = async (): Promise<Session> => {
-  return apiRequest<Session>('/session', {
-    method: 'POST'
-  })
+export const createSession = async (title?: string): Promise<Session> => {
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.session.create({ body: title ? { title } : {} })
+    if (result.error) throw result.error
+    if (!result.data) throw new Error('No session data returned')
+    return result.data
+  } catch (error) {
+    throw createAppError(error)
+  }
 }
 
 export const listSessions = async (): Promise<Session[]> => {
-  return apiRequest<Session[]>('/session')
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.session.list()
+    if (result.error) throw result.error
+    return result.data || []
+  } catch (error) {
+    throw createAppError(error)
+  }
 }
 
 export const deleteSession = async (sessionId: string): Promise<boolean> => {
-  return apiRequest<boolean>(`/session/${sessionId}`, {
-    method: 'DELETE'
-  })
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.session.delete({ path: { id: sessionId } })
+    if (result.error) throw result.error
+    return result.data || false
+  } catch (error) {
+    throw createAppError(error)
+  }
+}
+
+// Project Management
+export const getProjects = async (): Promise<Project[]> => {
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.project.list()
+    if (result.error) throw result.error
+    return result.data || []
+  } catch (error) {
+    throw createAppError(error)
+  }
+}
+
+export const getCurrentProject = async (): Promise<Project> => {
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.project.current()
+    if (result.error) throw result.error
+    if (!result.data) throw new Error('No current project data returned')
+    return result.data
+  } catch (error) {
+    throw createAppError(error)
+  }
 }
 
 // Provider and Model Management
 export const getProviders = async (): Promise<ProvidersResponse> => {
-  return apiRequest<ProvidersResponse>('/config/providers')
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.config.providers()
+    if (result.error) throw result.error
+    if (!result.data) throw new Error('No providers data returned')
+    return result.data
+  } catch (error) {
+    throw createAppError(error)
+  }
 }
 
 // Message Management
 export const sendMessage = async (
   sessionId: string,
   request: SendMessageRequest
-): Promise<Message> => {
-  return apiRequest<Message>(`/session/${sessionId}/message`, {
-    method: 'POST',
-    body: JSON.stringify(request)
-  })
+): Promise<{ info: AssistantMessage, parts: Part[] }> => {
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.session.prompt({
+      path: { id: sessionId },
+      body: request
+    })
+    if (result.error) throw result.error
+    if (!result.data) throw new Error('No message data returned')
+
+    // SDK returns { info: AssistantMessage, parts: Part[] }
+    return result.data
+  } catch (error) {
+    throw createAppError(error)
+  }
 }
 
-// App Management
+export const getSessionMessages = async (
+  sessionId: string
+): Promise<Array<{ info: Message, parts: Part[] }>> => {
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.session.messages({
+      path: { id: sessionId }
+    })
+    if (result.error) throw result.error
+    return result.data || []
+  } catch (error) {
+    throw createAppError(error)
+  }
+}
+
+// App Management - Simplified since SDK doesn't have these methods
 export const getAppInfo = async (): Promise<Record<string, unknown>> => {
-  return apiRequest<Record<string, unknown>>('/app')
+  // SDK doesn't have app.info, return empty object for now
+  return {}
 }
 
 export const initializeApp = async (): Promise<boolean> => {
-  return apiRequest<boolean>('/app/init', {
-    method: 'POST'
-  })
+  // SDK doesn't have app.init, return true for now
+  return true
 }
 
 export const getConfig = async (): Promise<Record<string, unknown>> => {
-  return apiRequest<Record<string, unknown>>('/config')
+  try {
+    const sdkClient = await initializeClient()
+    const result = await sdkClient.config.get()
+    if (result.error) throw result.error
+    return result.data || {}
+  } catch (error) {
+    throw createAppError(error)
+  }
 }
 
-// Note: Message creation utilities are now in utils/apiHelpers.ts
+// Get SDK client for direct access (e.g., for event subscription)
+export const getSDKClient = async () => {
+  return await initializeClient()
+}
 
 // Default export with all API functions
 export const api = {
+  // Projects
+  getProjects,
+  getCurrentProject,
+
   // Session
   createSession,
   listSessions,
   deleteSession,
-  
+
   // Providers
   getProviders,
-  
+
   // Messages
   sendMessage,
-  
+  getSessionMessages,
+
   // App
   getAppInfo,
   initializeApp,
-  getConfig
+  getConfig,
+
+  // SDK client access
+  getSDKClient
 }
 
 export default api

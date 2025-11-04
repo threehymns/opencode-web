@@ -48,15 +48,15 @@ Users need a web-based alternative to the command-line opencode TUI that provide
 ### Core Features
 
 #### 1. Single Session Chat
-- **Auto-create session** on app initialization via POST /session
-- **Send messages** via POST /session/{id}/message
-- **Stream responses** via GET /event for real-time updates
+- **Auto-create session** on app initialization via `client.session.create()`
+- **Send messages** via `client.session.prompt()`
+- **Stream responses** via `client.event.subscribe()` for real-time updates
 - **Support for basic message types**:
   - Text parts (user input and AI responses)
   - Tool invocations with results (display only)
 
 #### 2. Provider & Model Selection
-- **Provider listing** via GET /config/providers
+- **Provider listing** via `client.config.providers()`
 - **Simple model dropdown** for session
 - **Use default provider/model** if none selected
 

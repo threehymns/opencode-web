@@ -1,50 +1,124 @@
 import { create } from 'zustand'
-import { createSession } from '../services/api'
+import { persist } from 'zustand/middleware'
+import { listSessions, createSession, deleteSession } from '../services/api'
+import { useTodoStore } from './todoStore'
+import type { Session } from '../services/types'
 
 interface SessionState {
-  sessionId: string | null
-  isInitializing: boolean
+  sessions: Session[]
+  currentSession: Session | null
+  isLoadingSessions: boolean
+  isCreatingSession: boolean
   error: string | null
-  isIdle: boolean
-  initializeSession: () => Promise<void>
-  clearSession: () => void
-  setIdle: (idle: boolean) => void
+
+  // Actions
+  fetchSessions: () => Promise<void>
+  createNewSession: (title?: string, projectId?: string) => Promise<Session>
+  setCurrentSession: (session: Session | null) => void
+  deleteSessionById: (sessionId: string) => Promise<void>
+  clearError: () => void
 }
 
-export const useSessionStore = create<SessionState>((set, get) => ({
-  sessionId: null,
-  isInitializing: false,
-  error: null,
-  isIdle: false,
+export const useSessionStore = create<SessionState>()(
+  persist(
+    (set, get) => ({
+      sessions: [],
+      currentSession: null,
+      isLoadingSessions: false,
+      isCreatingSession: false,
+      error: null,
 
-  initializeSession: async () => {
-    console.log('initializeSession')
-    const { sessionId, isInitializing } = get()
-    
-    // Don't create a new session if one already exists or is being created
-    if (sessionId || isInitializing) {
-      return
-    }
+      fetchSessions: async () => {
+        const { isLoadingSessions } = get()
 
-    set({ isInitializing: true, error: null })
+        if (isLoadingSessions) {
+          return
+        }
 
-    try {
-      const session = await createSession()
-      set({ sessionId: session.id, isInitializing: false })
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
-        error: `Failed to initialize session - ${errorMessage}`, 
-        isInitializing: false 
+        set({ isLoadingSessions: true, error: null })
+
+        try {
+          const sessions = await listSessions()
+          // Sort sessions by creation date (newest first)
+          const sortedSessions = sessions.sort((a, b) => b.time.created - a.time.created)
+          set({ sessions: sortedSessions, isLoadingSessions: false })
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          set({
+            error: `Failed to load sessions - ${errorMessage}`,
+            isLoadingSessions: false
+          })
+        }
+      },
+
+      createNewSession: async (title?: string): Promise<Session> => {
+        set({ isCreatingSession: true, error: null })
+
+        try {
+          // For now, create session without specifying project - SDK will use current directory
+          // TODO: Update when SDK supports project selection in session creation
+          const newSession = await createSession(title)
+
+          // Add to sessions list and set as current
+          const { sessions } = get()
+          const updatedSessions = [newSession, ...sessions]
+          set({
+            sessions: updatedSessions,
+            currentSession: newSession,
+            isCreatingSession: false
+          })
+
+          return newSession
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          set({
+            error: `Failed to create session - ${errorMessage}`,
+            isCreatingSession: false
+          })
+          throw error
+        }
+      },
+
+      setCurrentSession: (session: Session | null) => {
+        set({ currentSession: session })
+      },
+
+      deleteSessionById: async (sessionId: string) => {
+        try {
+          await deleteSession(sessionId)
+
+          // Remove from sessions list
+          const { sessions, currentSession } = get()
+          const updatedSessions = sessions.filter(s => s.id !== sessionId)
+
+          // If deleted session was current, clear current session
+          const newCurrentSession = currentSession?.id === sessionId ? null : currentSession
+
+          set({
+            sessions: updatedSessions,
+            currentSession: newCurrentSession
+          })
+
+          // Clean up todos for the deleted session
+          useTodoStore.getState().clearTodosForSession(sessionId)
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          set({
+            error: `Failed to delete session - ${errorMessage}`
+          })
+          throw error
+        }
+      },
+
+      clearError: () => {
+        set({ error: null })
+      }
+    }),
+    {
+      name: 'opencode-session-state',
+      partialize: (state) => ({
+        currentSession: state.currentSession
       })
     }
-  },
-
-  clearSession: () => {
-    set({ sessionId: null, error: null, isInitializing: false, isIdle: false })
-  },
-
-  setIdle: (idle: boolean) => {
-    set({ isIdle: idle })
-  }
-}))
+  )
+)

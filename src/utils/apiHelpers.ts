@@ -1,5 +1,7 @@
-import type { SendMessageRequest, UserMessagePart } from '../services/types'
+import type { SendMessageRequest } from '../services/types'
+
 import { API_CONFIG, DEFAULT_SETTINGS } from './constants'
+import type { TextPartInput, FilePartInput, AgentPartInput } from '@opencode-ai/sdk/client'
 
 // Retry logic with exponential backoff
 export const retryRequest = async <T>(
@@ -14,7 +16,7 @@ export const retryRequest = async <T>(
       return await requestFn()
     } catch (error) {
       lastError = error as Error
-      
+
       // Don't retry on client errors (4xx)
       if (error instanceof Error && 'statusCode' in error) {
         const statusCode = (error as { statusCode: number }).statusCode
@@ -49,29 +51,15 @@ export const withTimeout = <T>(
   ])
 }
 
-// ID generation utility
-const generateId = (): string => {
-  return crypto.randomUUID()
-}
-
 // Message creation helpers
 export const createTextMessageRequest = (
   text: string,
-  sessionID: string,
-  providerID: string = DEFAULT_SETTINGS.PROVIDER,
-  modelID: string = DEFAULT_SETTINGS.MODEL,
-  mode: string = 'build'
+  providerID: string,
+  modelID: string = DEFAULT_SETTINGS.MODEL
 ): SendMessageRequest => {
-  const messageID = generateId()
   return {
-    messageID,
-    providerID,
-    modelID,
-    mode,
+    model: { providerID, modelID },
     parts: [{
-      id: generateId(),
-      sessionID,
-      messageID,
       type: 'text',
       text
     }]
@@ -81,21 +69,12 @@ export const createTextMessageRequest = (
 export const createFileMessageRequest = (
   mime: string,
   url: string,
-  sessionID: string,
   providerID: string = DEFAULT_SETTINGS.PROVIDER,
-  modelID: string = DEFAULT_SETTINGS.MODEL,
-  mode: string = 'build'
+  modelID: string = DEFAULT_SETTINGS.MODEL
 ): SendMessageRequest => {
-  const messageID = generateId()
   return {
-    messageID,
-    providerID,
-    modelID,
-    mode,
+    model: { providerID, modelID },
     parts: [{
-      id: generateId(),
-      sessionID,
-      messageID,
       type: 'file',
       mime,
       url
@@ -104,15 +83,11 @@ export const createFileMessageRequest = (
 }
 
 export const createMixedMessageRequest = (
-  parts: UserMessagePart[],
+  parts: (TextPartInput | FilePartInput | AgentPartInput)[],
   providerID: string = DEFAULT_SETTINGS.PROVIDER,
-  modelID: string = DEFAULT_SETTINGS.MODEL,
-  mode: string = 'build'
+  modelID: string = DEFAULT_SETTINGS.MODEL
 ): SendMessageRequest => ({
-  messageID: generateId(),
-  providerID,
-  modelID,
-  mode,
+  model: { providerID, modelID },
   parts
 })
 

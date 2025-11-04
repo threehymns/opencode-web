@@ -150,19 +150,17 @@ addUserMessage: (content: string, messageId: string, sessionId: string) => {
 const sessionId = await createSession()
 
 // 2. Hydrate from existing messages (if any)
-const existingMessages = await fetch(`/session/${sessionId}/message`)
+const existingMessages = await client.session.messages({ path: { id: sessionId } })
 hydrateFromSession(existingMessages)
 
 // 3. Start event stream for real-time updates
-const eventSource = new EventSource('/event')
-eventSource.onmessage = (event) => {
-  const eventData = JSON.parse(event.data)
-  switch (eventData.type) {
+for await (const event of client.event.subscribe()) {
+  switch (event.type) {
     case 'message.updated':
-      handleMessageUpdated(eventData.properties.info)
+      handleMessageUpdated(event.properties.info)
       break
     case 'message.part.updated':
-      handlePartUpdated(eventData.properties.part)
+      handlePartUpdated(event.properties.part)
       break
     // ...
   }

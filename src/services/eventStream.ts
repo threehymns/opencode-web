@@ -1,68 +1,103 @@
 import type { StreamEvent } from './types'
+import { getSDKClient } from './api'
 import { logger } from '../lib/logger'
 
 // Event listener type
 type EventListener<T = unknown> = (data: T) => void
 
-// EventStream service for handling Server-Sent Events
+// EventStream service using SDK event subscription
 export class EventStreamService {
-  private eventSource: EventSource | null = null
   private listeners: Map<string, EventListener[]> = new Map()
+  private eventSubscription: AsyncIterableIterator<unknown> | null = null
+  private isConnected = false
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectDelay = 1000
-  private baseUrl: string
+  private abortController: AbortController | null = null
 
-  constructor(baseUrl: string = '') {
-    this.baseUrl = baseUrl || (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:4096')
-    
+  constructor() {
     // Expose debug object globally in development
     if (import.meta.env.DEV) {
-      (window as any).__eventStreamDebug = this
+      (window as { __eventStreamDebug?: EventStreamService }).__eventStreamDebug = this
     }
   }
 
-  // Connect to the event stream
-  connect(): void {
-    if (this.eventSource) {
-      this.disconnect()
+  // Connect to the event stream using SDK
+  async connect(): Promise<void> {
+    if (this.eventSubscription) {
+      await this.disconnect()
     }
 
-    const url = `${this.baseUrl}/event`
-    this.eventSource = new EventSource(url)
+    try {
+      this.abortController = new AbortController()
+      const client = await getSDKClient()
+      const events = await client.event.subscribe()
 
-    this.eventSource.onopen = () => {
-      // console.log('✅ EventSource connected to:', url)
-      // console.log('📡 Connection state:', this.eventSource?.readyState)
-      // console.log('🎯 Active listeners:', Array.from(this.listeners.keys()))
+      this.isConnected = true
       this.reconnectAttempts = 0
-    }
 
-    this.eventSource.onmessage = (event) => {
-      try {
-        const data: StreamEvent = JSON.parse(event.data)
-        // Debug: Log all events to help identify the echo issue
-        logger.debug('📨 Received event:', data.type, data.properties)
-        this.handleEvent(data)
-      } catch (error) {
-        logger.error('Failed to parse event data:', error)
-      }
-    }
-
-    this.eventSource.onerror = (error) => {
-      logger.error('EventSource error:', error)
+      // Start processing events
+      this.processEvents(events.stream)
+    } catch (error) {
+      logger.error('Failed to connect to event stream:', error)
       this.handleReconnect()
     }
   }
 
   // Disconnect from the event stream
-  disconnect(): void {
-    if (this.eventSource) {
-      this.eventSource.close()
-      this.eventSource = null
+  async disconnect(): Promise<void> {
+    if (this.abortController) {
+      this.abortController.abort()
+      this.abortController = null
     }
+
+    this.eventSubscription = null
+    this.isConnected = false
     this.listeners.clear()
     this.reconnectAttempts = 0
+  }
+
+  // Process events from SDK subscription
+  private async processEvents(stream: AsyncIterableIterator<unknown>): Promise<void> {
+    try {
+      for await (const event of stream) {
+        if (this.abortController?.signal.aborted) break
+
+        try {
+          // Convert SDK event format to our StreamEvent format
+          const isEventLike = (e: unknown): e is { type: string; properties: Record<string, unknown> } => {
+            const obj = e as Record<string, unknown>
+            return typeof obj === 'object' && obj !== null &&
+                   typeof obj.type === 'string' &&
+                   typeof obj.properties === 'object' && obj.properties !== null
+          }
+
+          if (!isEventLike(event)) {
+            logger.warn('Received malformed event:', event)
+            continue
+          }
+
+          const eventData = event as { type: string; properties: Record<string, unknown> }
+
+          const streamEvent: StreamEvent = {
+            type: eventData.type,
+            properties: eventData.properties
+          }
+
+          logger.debug('📨 Received SDK event:', streamEvent.type, streamEvent.properties)
+          this.handleEvent(streamEvent)
+        } catch (error) {
+          logger.error('Failed to process event:', error)
+        }
+      }
+    } catch (error) {
+      if (!this.abortController?.signal.aborted) {
+        logger.error('Event stream error:', error)
+        this.handleReconnect()
+      }
+    } finally {
+      this.isConnected = false
+    }
   }
 
   // Subscribe to specific event types
@@ -70,9 +105,8 @@ export class EventStreamService {
     if (!this.listeners.has(eventType)) {
       this.listeners.set(eventType, [])
     }
-    
+
     this.listeners.get(eventType)!.push(callback as EventListener)
-    // console.log(`🔔 Subscribed to '${eventType}' (${this.listeners.get(eventType)!.length} listeners)`)
 
     // Return unsubscribe function
     return () => {
@@ -81,7 +115,6 @@ export class EventStreamService {
         const index = callbacks.indexOf(callback as EventListener)
         if (index > -1) {
           callbacks.splice(index, 1)
-          // console.log(`🔕 Unsubscribed from '${eventType}' (${callbacks.length} listeners remaining)`)
         }
       }
     }
@@ -102,7 +135,7 @@ export class EventStreamService {
   }
 
   // Handle reconnection logic
-  private handleReconnect(): void {
+  private async handleReconnect(): Promise<void> {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       logger.error('Max reconnection attempts reached')
       return
@@ -112,30 +145,24 @@ export class EventStreamService {
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
 
     logger.info(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`)
-    
-    setTimeout(() => {
-      this.connect()
+
+    setTimeout(async () => {
+      await this.connect()
     }, delay)
   }
 
   // Get connection state
-  get isConnected(): boolean {
-    return this.eventSource?.readyState === EventSource.OPEN
-  }
-
-  get connectionState(): number {
-    return this.eventSource?.readyState ?? EventSource.CLOSED
+  get connectionState(): boolean {
+    return this.isConnected
   }
 
   // Debug methods
   getDebugInfo() {
     return {
       isConnected: this.isConnected,
-      connectionState: this.connectionState,
-      url: this.eventSource?.url,
       listeners: Object.fromEntries(
         Array.from(this.listeners.entries()).map(([key, callbacks]) => [
-          key, 
+          key,
           callbacks.length
         ])
       ),
@@ -145,8 +172,8 @@ export class EventStreamService {
 }
 
 // Functional API for event streaming
-export const createEventStream = (baseUrl?: string): EventStreamService => {
-  return new EventStreamService(baseUrl)
+export const createEventStream = (): EventStreamService => {
+  return new EventStreamService()
 }
 
 // Hook-friendly event stream utilities

@@ -1,57 +1,62 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSessionStore } from '../stores/sessionStore'
-import { useMessageStore } from '../stores/messageStore'
+// import { useMessageStore } from '../stores/messageStore'
 import { useEventStream } from './useEventStream'
 import { useMessageHandling } from './useMessageHandling'
 import { DEFAULT_SETTINGS } from '../utils/constants'
 
 export function useChatSession() {
   const [selectedMode, setSelectedMode] = useState<string>(DEFAULT_SETTINGS.MODE)
-  
-  const { sessionId, isInitializing, error: sessionError, initializeSession } = useSessionStore()
-  const { addErrorMessage } = useMessageStore()
-  
+
+  const { currentSession, isCreatingSession, error: sessionError, fetchSessions } = useSessionStore()
+  // const { addErrorMessage } = useMessageStore()
+
   const { hasReceivedFirstEvent, setHasReceivedFirstEvent, isLoading, setIsLoading } = useEventStream()
   const { handleMessageSubmit } = useMessageHandling()
 
-  // Initialize session on hook initialization
+  // Fetch sessions on hook initialization
   useEffect(() => {
-    initializeSession()
-  }, [initializeSession])
+    fetchSessions()
+  }, [fetchSessions])
 
   // Display session error if any
   useEffect(() => {
     if (sessionError) {
-      addErrorMessage(sessionError)
+      // TODO: Handle error display with messageStoreV2
+      console.error('Session error:', sessionError)
     }
-  }, [sessionError, addErrorMessage])
+  }, [sessionError])
 
-  const submitMessage = useCallback(async (userInput: string, mode?: string) => {
-    const modeToUse = mode || selectedMode
+  const submitMessage = useCallback(async (userInput: string) => {
+    if (!currentSession) {
+      console.error('No current session selected')
+      return
+    }
+
     await handleMessageSubmit(
-      userInput, 
-      modeToUse, 
-      isLoading, 
-      setIsLoading, 
-      hasReceivedFirstEvent, 
-      setHasReceivedFirstEvent
+      userInput,
+      isLoading,
+      setIsLoading,
+      hasReceivedFirstEvent,
+      setHasReceivedFirstEvent,
+      currentSession.id
     )
-  }, [handleMessageSubmit, selectedMode, isLoading, setIsLoading, hasReceivedFirstEvent, setHasReceivedFirstEvent])
+  }, [handleMessageSubmit, isLoading, setIsLoading, hasReceivedFirstEvent, setHasReceivedFirstEvent, currentSession])
 
   return {
     // Session state
-    sessionId,
-    isInitializing,
+    currentSession,
+    isCreatingSession,
     isLoading,
-    
+
     // Mode management
     selectedMode,
     setSelectedMode,
-    
+
     // Message submission
     submitMessage,
-    
+
     // Computed states
-    isDisabled: isLoading || !sessionId || isInitializing
+    isDisabled: isLoading || !currentSession || isCreatingSession
   }
 }

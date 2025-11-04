@@ -5,7 +5,7 @@ A web-based user interface for [opencode](https://github.com/sst/opencode), prov
 ## Features
 
 - **Real-time chat interface** with AI coding agents
-- **Live streaming responses** via Server-Sent Events
+- **Live streaming responses** via SDK event subscription
 - **Tool execution display** with enhanced diff viewing for code changes
 - **Model selection** from multiple AI providers
 - **Responsive design** for desktop and mobile
@@ -55,7 +55,7 @@ The app will auto-detect your opencode API server. If running on a different hos
 
 - **React 19** with TypeScript
 - **Vite** for build tooling
-- **EventSource** for real-time streaming
+- **@opencode-ai/sdk** for API integration
 - **CSS Modules** for styling
 
 ### Project Structure
