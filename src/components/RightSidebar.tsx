@@ -4,7 +4,7 @@ import {
 	ClockIcon,
 	XCircleIcon,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -19,28 +19,37 @@ import {
 } from "@/components/ui/sidebar";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useTodoStore } from "@/stores/todoStore";
+import { getSessionDiff } from "@/services/api";
+import type { ChangedFile } from "@/services/types";
 
-interface ChangedFile {
-	file: string;
-	added: number;
-	removed: number;
-}
+
 
 export function RightSidebar() {
 	const { currentSession } = useSessionStore();
 	const { getTodosForSession } = useTodoStore();
+	const [changedFiles, setChangedFiles] = useState<ChangedFile[]>([]);
 
 	const todos = useMemo(() => {
 		if (!currentSession) return [];
 		return getTodosForSession(currentSession.id);
 	}, [currentSession, getTodosForSession]);
 
-	// Placeholder for changed files - in a real implementation, this would come from git diff
-	const changedFiles: ChangedFile[] = [
-		// Example data - replace with actual git diff stats
-		// { file: 'src/components/AppSidebar.tsx', added: 45, removed: 12 },
-		// { file: 'src/App.tsx', added: 10, removed: 5 },
-	];
+	useEffect(() => {
+		const fetchDiff = async () => {
+			if (!currentSession) {
+				setChangedFiles([]);
+				return;
+			}
+			try {
+				const diff = await getSessionDiff(currentSession.id);
+				setChangedFiles(diff);
+			} catch (error) {
+				console.error("Failed to fetch session diff:", error);
+				setChangedFiles([]);
+			}
+		};
+		fetchDiff();
+	}, [currentSession]);
 
 	const getStatusIcon = (status: string) => {
 		switch (status) {
@@ -127,10 +136,21 @@ export function RightSidebar() {
 										<SidebarMenuItem key={index} className="p-2">
 											<div className="flex-1 min-w-0">
 												<div className="text-sm font-medium truncate">
-													{file.file}
+													{(() => {
+														const lastSlashIndex = file.file.lastIndexOf('/');
+														if (lastSlashIndex === -1) return file.file;
+														const dirPath = file.file.slice(0, lastSlashIndex + 1);
+														const fileName = file.file.slice(lastSlashIndex + 1);
+														return (
+															<>
+																<span className="text-muted-foreground">{dirPath}</span>
+																{fileName}
+															</>
+														);
+													})()}
 												</div>
 												<div className="text-xs text-muted-foreground">
-													+{file.added} -{file.removed}
+													<span className="text-green-500">+{file.added}</span> <span className="text-red-500">-{file.removed}</span>
 												</div>
 											</div>
 										</SidebarMenuItem>

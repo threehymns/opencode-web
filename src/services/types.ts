@@ -43,6 +43,13 @@ import type {
 // Re-export SDK types for convenience
 export type { Project, Session };
 
+// Error Types
+export interface AppError extends Error {
+	code?: string;
+	statusCode?: number;
+	data?: unknown;
+}
+
 // Request Types (adapted for SDK)
 export interface SendMessageRequest {
 	model: { providerID: string; modelID: string };
@@ -50,53 +57,9 @@ export interface SendMessageRequest {
 	noReply?: boolean;
 }
 
-// Event Stream Types (adapted for SDK events)
-export interface StreamEvent {
-	type: string;
-	properties: Record<string, unknown>;
-}
-
-// Error Types
-export interface ApiError {
-	data: Record<string, unknown>;
-}
-
-export interface AppError extends Error {
-	code?: string;
-	statusCode?: number;
-	data?: unknown;
-}
-
-// Todo Types
-export interface TodoItem {
-	content: string;
-	status: "pending" | "in_progress" | "completed" | "cancelled";
-	id: string;
-	priority: "high" | "medium" | "low";
-}
-
-export const isTodoArgs = (
-	args?: Record<string, unknown>,
-): args is { todos: TodoItem[] } => {
-	return (
-		args != null &&
-		Array.isArray(args.todos) &&
-		args.todos.every(
-			(todo) =>
-				typeof todo === "object" &&
-				todo != null &&
-				typeof todo.content === "string" &&
-				typeof todo.status === "string" &&
-				typeof todo.id === "string" &&
-				typeof todo.priority === "string",
-		)
-	);
-};
-
-// Config Types
-export interface Config {
-	API_BASE_URL: string;
-	DEFAULT_PROVIDER: string;
-	DEFAULT_MODEL: string;
-	EVENT_STREAM_URL: string;
+// Diff Types
+export interface ChangedFile {
+	file: string;
+	added: number;
+	removed: number;
 }

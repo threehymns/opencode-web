@@ -1,3 +1,4 @@
+import { createOpencodeClient } from "@opencode-ai/sdk";
 import type {
 	AssistantMessage,
 	Message,
@@ -5,8 +6,7 @@ import type {
 	Project,
 	Session,
 } from "@opencode-ai/sdk/client";
-import { createOpencodeClient } from "@opencode-ai/sdk/client";
-import type { AppError, ProvidersResponse, SendMessageRequest } from "./types";
+import type { AppError, ProvidersResponse, SendMessageRequest, ChangedFile } from "./types";
 
 // SDK client instance
 let client: Awaited<ReturnType<typeof createOpencodeClient>> | null = null;
@@ -148,6 +148,25 @@ export const getSessionMessages = async (
 	}
 };
 
+export const getSessionDiff = async (sessionId: string): Promise<ChangedFile[]> => {
+	try {
+		const sdkClient = await initializeClient();
+		const result = await sdkClient.session.diff({
+			path: { id: sessionId },
+		});
+		if (result.error) throw result.error;
+		const diffData = result.data || [];
+		// Map FileDiff to ChangedFile
+		return diffData.map((item: any) => ({
+			file: item.file,
+			added: item.added || item.additions || 0,
+			removed: item.removed || item.deletions || 0,
+		}));
+	} catch (error) {
+		throw createAppError(error);
+	}
+};
+
 // App Management - Simplified since SDK doesn't have these methods
 export const getAppInfo = async (): Promise<Record<string, unknown>> => {
 	// SDK doesn't have app.info, return empty object for now
@@ -192,6 +211,7 @@ export const api = {
 	// Messages
 	sendMessage,
 	getSessionMessages,
+	getSessionDiff,
 
 	// App
 	getAppInfo,
