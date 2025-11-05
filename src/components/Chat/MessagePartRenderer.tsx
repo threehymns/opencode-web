@@ -6,7 +6,6 @@ import {
 	CircleIcon,
 	ClockIcon,
 	Loader2Icon,
-	PlayIcon,
 	XCircleIcon,
 } from "lucide-react";
 import type React from "react";
@@ -17,8 +16,14 @@ import {
 	oneDark,
 	oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
-import type { TodoItem } from "../../services/types";
 import { useTheme } from "../theme-provider";
+
+interface TodoItem {
+	content: string;
+	status: "pending" | "in_progress" | "completed" | "cancelled";
+	priority: "high" | "medium" | "low";
+	id: string;
+}
 
 interface MessagePartRendererProps {
 	part: Part;
@@ -406,22 +411,10 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 			);
 
 		case "step-start":
-			return (
-				<div className="flex items-center gap-2 text-muted-foreground border-l-4 border-border pl-4 py-1">
-					<PlayIcon className="h-4 w-4" />
-					<span className="text-sm">Starting step...</span>
-				</div>
-			);
+			return null;
 
 		case "step-finish":
-			return (
-				<div className="flex items-center gap-2 text-primary border-l-4 border-primary pl-4 py-1">
-					<CheckCircleIcon className="h-4 w-4" />
-					<span className="text-sm">
-						Step completed: {(part as any).reason}
-					</span>
-				</div>
-			);
+			return null;
 
 		case "agent":
 			return (
