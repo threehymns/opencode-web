@@ -118,9 +118,6 @@ export function AppSidebar({ onNewSession, onSelectSession }: AppSidebarProps) {
 	return (
 		<Sidebar>
 			<SidebarHeader>
-				<div className="flex items-center justify-between">
-					<h2 className="text-lg font-semibold">Sessions</h2>
-				</div>
 				<Button
 					onClick={onNewSession}
 					className="w-full"
