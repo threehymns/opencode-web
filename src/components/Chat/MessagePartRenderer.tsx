@@ -1,14 +1,11 @@
 import type { Part, ToolState } from "@opencode-ai/sdk/client";
 import {
-	BrainIcon,
 	CheckCircleIcon,
-	CheckIcon,
 	ChevronDownIcon,
 	ChevronRightIcon,
 	CircleIcon,
 	ClockIcon,
 	CodeIcon,
-	CopyIcon,
 	Edit3,
 	LightbulbIcon,
 	Loader2Icon,
@@ -29,7 +26,7 @@ import { json } from "@codemirror/lang-json";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { markdown } from "@codemirror/lang-markdown";
-import { Button } from "../ui/button";
+
 import { CopyButton } from "../copy-button";
 
 interface TodoItem {
@@ -74,7 +71,8 @@ const EditRenderer: React.FC<{ state: ToolState; theme: string }> = memo(({ stat
 
 	useEffect(() => {
 		const metadata = (state as any).metadata;
-		if (!isDiffExpanded || !diffRef.current || !metadata.filediff?.before || !metadata.filediff?.after || state.status !== "completed") {
+				if (!isDiffExpanded || !diffRef.current || !metadata?.filediff?.before || !metadata?.filediff?.after || state.status !== "completed") {
+
 			return;
 		}
 
@@ -816,10 +814,7 @@ const areEqual = (
 	if (prev.id !== next.id || prev.type !== next.type) return false;
 	if (prev.type === "text" && (prev as any).text !== (next as any).text)
 		return false;
-	if (
-		prev.type === "tool" &&
-		JSON.stringify((prev as any).state) !== JSON.stringify((next as any).state)
-	)
+	if (prev.type === "tool" && (prev as any).state?.status !== (next as any).state?.status)
 		return false;
 	// For other types, assume they don't change content often
 	return true;

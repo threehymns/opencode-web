@@ -15,8 +15,10 @@ interface SessionState {
 	fetchSessions: () => Promise<void>;
 	createNewSession: (title?: string, projectId?: string) => Promise<Session>;
 	setCurrentSession: (session: Session | null) => void;
-	deleteSessionById: (sessionId: string) => Promise<void>;
-	clearError: () => void;
+			deleteSessionById: (sessionId: string) => Promise<void>;
+			updateSessionTitle: (sessionId: string, title: string) => void;
+			clearError: () => void;
+
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -85,6 +87,18 @@ export const useSessionStore = create<SessionState>()(
 
 			setCurrentSession: (session: Session | null) => {
 				set({ currentSession: session });
+			},
+
+			updateSessionTitle: (sessionId: string, title: string) => {
+				set((state) => ({
+					sessions: state.sessions.map((session) =>
+						session.id === sessionId ? { ...session, title } : session,
+					),
+					currentSession:
+						state.currentSession?.id === sessionId
+							? { ...state.currentSession, title }
+							: state.currentSession,
+				}));
 			},
 
 			deleteSessionById: async (sessionId: string) => {

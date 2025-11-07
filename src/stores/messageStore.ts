@@ -37,21 +37,17 @@ export const useMessageStore = create<MessageStoreState>((set) => ({
 
 	handleMessageUpdated: (info: Message) => {
 		set((state) => {
-			const existingIndex = state.messages.findIndex(
-				(msg) => msg.info.id === info.id,
-			);
-			if (existingIndex >= 0) {
-				const updatedMessages = [...state.messages];
-				updatedMessages[existingIndex] = {
-					...updatedMessages[existingIndex],
-					info,
-				};
-				return { messages: updatedMessages };
-			} else {
-				return {
-					messages: [...state.messages, { info, parts: [] }],
-				};
+			const index = state.messages.findIndex((msg) => msg.info.id === info.id);
+			if (index === -1) {
+				return { messages: [...state.messages, { info, parts: [] }] };
 			}
+			const existing = state.messages[index];
+			if (existing.info === info) {
+				return state;
+			}
+			const nextMessages = state.messages.slice();
+			nextMessages[index] = { ...existing, info };
+			return { messages: nextMessages };
 		});
 	},
 
@@ -60,20 +56,26 @@ export const useMessageStore = create<MessageStoreState>((set) => ({
 			const messageIndex = state.messages.findIndex(
 				(msg) => msg.info.id === part.messageID,
 			);
-			if (messageIndex >= 0) {
-				const updatedMessages = [...state.messages];
-				const message = updatedMessages[messageIndex];
-				const partIndex = message.parts.findIndex((p) => p.id === part.id);
-
-				if (partIndex >= 0) {
-					message.parts[partIndex] = part;
-				} else {
-					message.parts.push(part);
-				}
-
-				return { messages: updatedMessages };
+			if (messageIndex === -1) {
+				return state;
 			}
-			return state;
+			const message = state.messages[messageIndex];
+			const existingPartIndex = message.parts.findIndex((p) => p.id === part.id);
+			if (
+				existingPartIndex !== -1 &&
+				message.parts[existingPartIndex] === part
+			) {
+				return state;
+			}
+			const nextMessages = state.messages.slice();
+			const nextParts = message.parts.slice();
+			if (existingPartIndex !== -1) {
+				nextParts[existingPartIndex] = part;
+			} else {
+				nextParts.push(part);
+			}
+			nextMessages[messageIndex] = { ...message, parts: nextParts };
+			return { messages: nextMessages };
 		});
 	},
 
@@ -103,9 +105,7 @@ export const useMessageStore = create<MessageStoreState>((set) => ({
 			],
 		};
 
-		set((state) => ({
-			messages: [...state.messages, userMessage],
-		}));
+		set((state) => ({ messages: [...state.messages, userMessage] }));
 	},
 
 	addAssistantMessage: (messageWithParts: MessageWithParts) => {
