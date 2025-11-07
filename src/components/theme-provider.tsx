@@ -10,11 +10,18 @@ type ThemeProviderProps = {
 
 type ThemeProviderState = {
 	theme: Theme;
+	resolvedTheme: 'light' | 'dark';
 	setTheme: (theme: Theme) => void;
 };
 
+const getResolvedTheme = (currentTheme: Theme = 'system') => 
+  currentTheme === 'system' 
+    ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : currentTheme;
+
 const initialState: ThemeProviderState = {
 	theme: "system",
+	resolvedTheme: getResolvedTheme('system'),
 	setTheme: () => null,
 };
 
@@ -27,33 +34,42 @@ export function ThemeProvider({
 	...props
 }: ThemeProviderProps) {
 	const [theme, setTheme] = useState<Theme>(
-		() => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
-	);
+  () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
+);
 
-	useEffect(() => {
-		const root = window.document.documentElement;
+const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(getResolvedTheme);
 
-		root.classList.remove("light", "dark");
+useEffect(() => {
+  const root = window.document.documentElement;
+  root.classList.remove("light", "dark");
 
-		if (theme === "system") {
-			const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-				.matches
-				? "dark"
-				: "light";
+  const updateTheme = () => {
+    const newResolvedTheme = theme === "system" ? getResolvedTheme() : theme;
+    root.classList.add(newResolvedTheme);
+    setResolvedTheme(newResolvedTheme);
+  };
 
-			root.classList.add(systemTheme);
-			return;
-		}
+  updateTheme();
 
-		root.classList.add(theme);
-	}, [theme]);
+  // Listen for system theme changes
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleChange = () => {
+    if (theme === "system") {
+      updateTheme();
+    }
+  };
 
-	const value = {
-		theme,
-		setTheme: (theme: Theme) => {
-			localStorage.setItem(storageKey, theme);
-			setTheme(theme);
-		},
+  mediaQuery.addEventListener("change", handleChange);
+  return () => mediaQuery.removeEventListener("change", handleChange);
+}, [theme]);
+
+const value = {
+  theme,
+  resolvedTheme,
+  setTheme: (newTheme: Theme) => {
+    localStorage.setItem(storageKey, newTheme);
+    setTheme(newTheme);
+  },
 	};
 
 	return (

@@ -1,22 +1,34 @@
 import type { Part, ToolState } from "@opencode-ai/sdk/client";
 import {
 	CheckCircleIcon,
+	CheckIcon,
 	ChevronDownIcon,
 	ChevronRightIcon,
 	CircleIcon,
 	ClockIcon,
+	CodeIcon,
+	CopyIcon,
+	Edit3,
 	Loader2Icon,
 	XCircleIcon,
 } from "lucide-react";
 import type React from "react";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import {
-	oneDark,
-	oneLight,
-} from "react-syntax-highlighter/dist/esm/styles/prism";
+import { EditorView } from "codemirror";
+import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
+import { MergeView, unifiedMergeView } from "@codemirror/merge";
+import { lineNumbers } from "@codemirror/view";
 import { useTheme } from "../theme-provider";
+import { EditorState } from "@codemirror/state";
+import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
+import { json } from "@codemirror/lang-json";
+import { css } from "@codemirror/lang-css";
+import { html } from "@codemirror/lang-html";
+import { markdown } from "@codemirror/lang-markdown";
+import { Button } from "../ui/button";
+import { CopyButton } from "../copy-button";
 
 interface TodoItem {
 	content: string;
@@ -28,6 +40,226 @@ interface TodoItem {
 interface MessagePartRendererProps {
 	part: Part;
 }
+
+// Function to detect language from file path
+const getLanguageExtension = (filePath: string) => {
+	const extension = filePath.split('.').pop()?.toLowerCase();
+	switch (extension) {
+		case 'js':
+		case 'jsx':
+			return javascript({ jsx: true });
+		case 'ts':
+		case 'tsx':
+			return javascript({ typescript: true, jsx: true });
+		case 'py':
+			return python();
+		case 'json':
+			return json();
+		case 'css':
+			return css();
+		case 'html':
+			return html();
+		case 'md':
+			return markdown();
+		default:
+			return null;
+	}
+};
+
+const EditRenderer: React.FC<{ state: ToolState; theme: string }> = memo(({ state, theme }) => {
+	const diffRef = useRef<HTMLDivElement>(null);
+	const [isDiffExpanded, setIsDiffExpanded] = useState(false);
+
+	useEffect(() => {
+		const metadata = (state as any).metadata;
+		if (!isDiffExpanded || !diffRef.current || !metadata.filediff?.before || !metadata.filediff?.after || state.status !== "completed") {
+			return;
+		}
+
+		let view: EditorView | MergeView | null = null;
+		const container = diffRef.current;
+		const filePath = (state as any).input?.filePath || '';
+		const languageExtension = getLanguageExtension(filePath);
+
+		const sharedExtensions = [
+			theme === "dark" ? vscodeDark : vscodeLight,
+			lineNumbers(),
+			EditorView.lineWrapping,
+			EditorView.editable.of(false),
+			EditorState.readOnly.of(true),
+			EditorView.theme({'.cm-content': { backgroundColor: 'var(--card)' }, '.cm-gutter': { backgroundColor: 'var(--muted)' }, '.cm-gutters.cm-gutters-before': { borderColor: 'var(--border)' }, ".cm-lineWrapping": {wordBreak: "break-all"} } ),
+		];
+
+		if (languageExtension) {
+			sharedExtensions.push(languageExtension);
+		}
+
+		try {
+			if (container.offsetWidth >= 640) {
+				// Side-by-side for larger screens
+
+				view = new MergeView({
+					a: {
+						doc: metadata.filediff.before,
+						extensions: sharedExtensions,
+					},
+					b: {
+						doc: metadata.filediff.after,
+						extensions: sharedExtensions,
+					},
+					parent: container,
+					collapseUnchanged: { margin: 3, minSize: 2 },
+				});
+			} else {
+				// Unified for smaller screens
+				view = new EditorView({
+					parent: container,
+					doc: metadata.filediff.after,
+					extensions: [
+						...sharedExtensions,
+						EditorView.lineWrapping,
+						unifiedMergeView({
+							original: metadata.filediff.before,
+							mergeControls:false,
+							collapseUnchanged: { margin: 3, minSize: 2 },
+						}),
+					],
+				});
+			}
+
+			// Force a resize event to ensure proper rendering
+			setTimeout(() => {
+				if (view) {
+					const event = new Event('resize');
+					window.dispatchEvent(event);
+				}
+			}, 0);
+
+		} catch (error) {
+			console.error('Error initializing diff view:', error);
+		}
+
+		return () => {
+			if (view) {
+				try {
+					view.destroy();
+				} catch (e) {
+					console.error('Error cleaning up diff view:', e);
+				}
+			}
+		};
+	}, [state, theme, isDiffExpanded]);
+
+	const renderStateContent = () => {
+		switch (state.status) {
+      case "pending":
+        return (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <ClockIcon className="h-4 w-4" />
+            <span className="text-sm">Preparing edit...</span>
+          </div>
+        );
+
+      case "running":
+        return (
+          <div className="flex items-center gap-2 text-primary">
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+            <div className="flex-1">
+              <div className="text-sm font-medium">
+                {(state as any).title || "Applying edit"}
+              </div>
+            </div>
+          </div>
+        );
+
+      case "completed": {
+        const output = (state as any).output;
+        if (output && typeof output === "object") {
+          if (output.diagnostics)
+            console.log("Diagnostics:", output.diagnostics);
+          if (output.filediff) console.log("File diff:", output.filediff);
+        }
+        return (
+          <button
+            className="space-y-2 w-full items-center"
+            type="button"
+            onClick={() => setIsDiffExpanded(!isDiffExpanded)}
+          >
+            <div className="flex items-center justify-between text-primary">
+              <div className="flex items-center gap-2">
+                <Edit3 className="h-4 w-4" />
+                 <span className="text-sm font-medium">
+                   Edited{" "}
+                   {(() => {
+                     const path = (state as any).input.filePath;
+                     const lastSlashIndex = path.lastIndexOf("/");
+                     if (lastSlashIndex === -1) return path;
+                     return (
+                       <>
+                         <span className="text-muted-foreground truncate">
+                           {path.substring(0, lastSlashIndex + 1)}
+                         </span>
+                         {path.substring(lastSlashIndex + 1)}
+                       </>
+                     );
+                   })()}
+                 </span>
+              </div>
+              <div className="flex items-center gap-2">
+                 <span className="text-xs text-green-500">
+                   +{(state as any).metadata.filediff?.additions}
+                 </span>
+                 <span className="text-xs text-red-500">
+                   -{(state as any).metadata.filediff?.deletions}
+                 </span>
+                {isDiffExpanded ? (
+                  <>
+                    <ChevronDownIcon className="h-3 w-3" />
+                  </>
+                ) : (
+                  <>
+                    <ChevronRightIcon className="h-3 w-3" />
+                  </>
+                )}
+              </div>
+            </div>
+            {isDiffExpanded && (
+              <div
+                ref={diffRef}
+                className="mt-2 w-full text-sm text-start"
+              >
+              </div>
+            )}
+          </button>
+        );
+      }
+
+      case "error":
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-destructive">
+              <XCircleIcon className="h-4 w-4" />
+              <span className="text-sm font-medium">Edit failed</span>
+            </div>
+            <div className="bg-destructive/10 rounded p-3 border-l-4 border-destructive">
+              <pre className="text-xs whitespace-pre-wrap font-mono text-destructive">
+                {(state as any).error}
+              </pre>
+            </div>
+          </div>
+        );
+
+      default:
+        return (
+          <div className="text-sm text-muted-foreground">Unknown state</div>
+        );
+    }
+	};
+
+	return (
+		<div className="border rounded-lg p-3 bg-card flex items-center">{renderStateContent()}</div>
+	);
+});
 
 const TodoRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 	const getStatusIcon = useCallback((status: TodoItem["status"]) => {
@@ -223,6 +455,7 @@ const ToolStateRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 								((state as any).attachments &&
 									(state as any).attachments.length > 0)) && (
 								<button
+									type="button"
 									onClick={() => setIsExpanded(!isExpanded)}
 									className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
 								>
@@ -250,9 +483,9 @@ const ToolStateRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 												Attachments:
 											</div>
 											{(state as any).attachments.map(
-												(attachment: any, index: number) => (
+												(attachment: any) => (
 													<div
-														key={index}
+														key={attachment.filename || attachment.mime}
 														className="text-xs bg-accent p-2 rounded"
 													>
 														📎 {attachment.filename || "File"} (
@@ -274,6 +507,7 @@ const ToolStateRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 							<XCircleIcon className="h-4 w-4" />
 							<span className="text-sm font-medium">Tool execution failed</span>
 							<button
+								type="button"
 								onClick={() => setIsExpanded(!isExpanded)}
 								className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
 							>
@@ -306,56 +540,153 @@ const ToolStateRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 	);
 });
 
+const getLanguageExtensionByName = (language: string | undefined) => {
+  if (!language) {
+    return undefined;
+  }
+  const normalized = language.toLowerCase();
+  switch (normalized) {
+    case "js":
+    case "jsx":
+    case "javascript":
+      return javascript({ jsx: true });
+    case "ts":
+    case "tsx":
+    case "typescript":
+      return javascript({ typescript: true, jsx: true });
+    case "py":
+    case "python":
+      return python();
+    case "json":
+      return json();
+    case "css":
+      return css();
+    case "html":
+      return html();
+    case "md":
+    case "markdown":
+      return markdown();
+    default:
+      return undefined;
+  }
+};
+
 const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
-	part,
+  part,
 }) => {
-	const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
-	const syntaxStyle = useMemo(
-		() => (theme === "dark" ? oneDark : oneLight),
-		[theme],
-	);
+  const markdownComponents = useMemo(
+    () => ({
+      code({
+        inline,
+        className,
+        children,
+        ...props
+      }: {
+        inline?: boolean;
+        className?: string;
+        children?: React.ReactNode;
+      }) {
+        const match = /language-([\w-]+)/.exec(className || "");
+        const language = match?.[1];
 
-	const markdownComponents = useMemo(
-		() => ({
-			code({
-				inline,
-				className,
-				children,
-				...props
-			}: {
-				inline?: boolean;
-				className?: string;
-				children?: React.ReactNode;
-			}) {
-				const match = /language-(\w+)/.exec(className || "");
-				return !inline && match ? (
-					<SyntaxHighlighter
-						style={syntaxStyle}
-						language={match[1]}
-						PreTag="div"
-						{...props}
-					>
-						{String(children).replace(/\n$/, "")}
-					</SyntaxHighlighter>
-				) : (
-					<code
-						className={`bg-muted px-1.5 py-0.5 rounded text-sm font-mono ${className}`}
-						{...props}
-					>
-						{children}
-					</code>
-				);
-			},
-		}),
-		[syntaxStyle],
-	);
+        if (!inline && language) {
+          const langExtension = getLanguageExtensionByName(language);
+
+          const codeText =
+            typeof children === "string"
+              ? children
+              : Array.isArray(children)
+              ? children.join("")
+              : String(children ?? "");
+
+          const extensions = [
+            resolvedTheme === "dark" ? vscodeDark : vscodeLight,
+            lineNumbers(),
+            EditorView.lineWrapping,
+            EditorView.editable.of(false),
+            EditorState.readOnly.of(true),
+            EditorView.theme(
+              {
+                ".cm-editor": {
+                  backgroundColor: "var(--card)",
+                  borderRadius: "0.375rem",
+                },
+                ".cm-content": {
+                  backgroundColor: "var(--card)",
+                },
+                ".cm-scroller": {
+                  fontFamily:
+                    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                },
+                ".cm-gutters": {
+                  backgroundColor: "var(--muted)",
+                  borderRight: "1px solid var(--border)",
+                  color: "var(--muted-foreground)",
+                },
+              },
+              { dark: resolvedTheme === "dark" },
+            ),
+            ...(langExtension ? [langExtension] : []),
+          ];
+
+          const state = EditorState.create({
+            doc: codeText.replace(/\n$/, ""),
+            extensions,
+          });
+
+          const attachRef = (node: HTMLDivElement | null) => {
+            if (!node) return;
+            while (node.firstChild) {
+              node.removeChild(node.firstChild);
+            }
+            new EditorView({
+              state,
+              parent: node,
+            });
+          };
+
+          return (
+            <div className="mt-2 overflow-clip rounded-md border bg-card max-w-prose">
+							<header className="sticky top-0 z-10 flex items-center justify-between gap-2 p-1 bg-background/90 backdrop-blur border-b border-border/50">
+								<div className="ml-1 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+									<CodeIcon className="h-4 w-4" />
+									{language}
+								</div>
+								<CopyButton value={codeText} />
+							</header>
+              <div ref={attachRef} />
+            </div>
+          );
+        }
+
+        return (
+          <code
+            className={`bg-muted px-1.5 py-0.5 rounded text-sm font-mono ${className ?? ""}`}
+            {...props}
+          >
+            {children}
+          </code>
+        );
+      },
+    }),
+    [resolvedTheme],
+  );
 
 	switch (part.type) {
 		case "text":
 			return (
 				<div className="prose prose-sm max-w-none dark:prose-invert">
-					<ReactMarkdown components={markdownComponents}>
+					<ReactMarkdown
+						components={{
+							...markdownComponents,
+							// Prevent ReactMarkdown from wrapping our custom code block in an extra pre
+							pre({ children }) {
+								return <>{children}</>;
+							},
+						}}
+					>
 						{(part as any).text}
 					</ReactMarkdown>
 				</div>
@@ -375,13 +706,18 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 
 		case "tool": {
 			const toolName = (part as any).tool;
+			if (toolName === "edit") {
+				console.log("Rendering edit tool part:", part);
+			}
 			return (
 				<div className="space-y-2">
 					{toolName === "todowrite" ? (
 						<TodoRenderer state={(part as any).state} />
+					) : toolName === "edit" ? (
+						<EditRenderer state={(part as any).state} theme={resolvedTheme} />
 					) : (
-						<>
-							<div className="text-sm font-medium text-muted-foreground">
+					  <>
+					    <div className="text-sm font-medium text-muted-foreground">
 								Tool: {toolName}
 							</div>
 							<ToolStateRenderer state={(part as any).state} />
@@ -432,6 +768,24 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 						🔄 Retry attempt {(part as any).attempt}
 					</div>
 				</div>
+			);
+
+		case "patch":
+			return (
+				// <div className="border rounded-lg p-3 bg-card">
+				// 	<div className="flex items-center gap-2 text-primary mb-2">
+				// 		<div className="text-sm font-medium">Patch Applied</div>
+				// 	</div>
+				// 	<div className="space-y-1">
+				// 		<div className="text-xs text-muted-foreground">
+				// 			Hash: {(part as any).hash}
+				// 		</div>
+				// 		<div className="text-xs text-muted-foreground">
+				// 			Files: {(part as any).files.join(", ")}
+				// 		</div>
+				// 	</div>
+				// </div>
+        null
 			);
 
 		default:
