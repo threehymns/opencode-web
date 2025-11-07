@@ -12,12 +12,17 @@ import {
 import Textarea from "react-textarea-autosize";
 import { ModelCommand } from "../ModelCommand";
 import { Button } from "../ui/button";
+import { MODE_LABELS } from "@/utils/constants";
+import { Command, CommandItem, CommandList, CommandInput, CommandEmpty } from "../ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 interface MessageInputProps {
 	onSubmit: (message: string) => void;
 	disabled: boolean;
 	isLoading: boolean;
 	isInitializing: boolean;
+	selectedMode: string;
+	onModeChange: (mode: string) => void;
 }
 
 export function MessageInput({
@@ -25,6 +30,8 @@ export function MessageInput({
 	disabled,
 	isLoading,
 	isInitializing,
+	selectedMode,
+	onModeChange,
 }: MessageInputProps) {
 	const inputRef = useRef<HTMLTextAreaElement | null>(null);
 	const [input, setInput] = useState("");
@@ -84,8 +91,32 @@ export function MessageInput({
 						rows={1}
 					/>
 					<div className="flex items-center justify-between pt-2">
+						<div className="flex">
 						<ModelCommand />
-
+						<Popover>
+							<PopoverTrigger asChild>
+								<Button variant="ghost" size="sm" className="text-muted-foreground">
+									{selectedMode}
+								</Button>
+							</PopoverTrigger>
+						<PopoverContent className="p-0 w-fit">
+							<Command className="w-48">
+								<CommandInput placeholder="Select mode..." />
+								<CommandList>
+									<CommandEmpty>No modes found.</CommandEmpty>
+									{Object.entries(MODE_LABELS).map(([value, label]) => (
+										<CommandItem key={value} value={value} onSelect={() => { 
+											document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+											onModeChange(value);
+										}}>
+											{label}
+										</CommandItem>
+									))}
+								</CommandList>
+							</Command>
+					</PopoverContent>
+				</Popover>
+						</div>
 						{/* Submit button */}
 						<Button
 							type="submit"

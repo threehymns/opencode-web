@@ -20,10 +20,10 @@ const MessageRenderer = memo(({ messageWithParts }: MessageRendererProps) => {
           {isUser ? 'U' : 'A'}
         </AvatarFallback>
       </Avatar> */}
-			<div className="flex-1 min-w-0">
+			<div className="flex-1 min-w-0 max-w-4xl mx-auto">
 				<div
-					className={`rounded-lg p-3 max-w-full space-y-3 ${
-						isUser ? "bg-primary/10" : "bg-transparent"
+					className={`rounded-lg p-3 max-w-3xl space-y-3 ${
+						isUser ? "bg-primary/10 float-end max-w-prose" : "bg-transparent"
 					}`}
 				>
 					{parts.map((part) => (
@@ -63,8 +63,8 @@ export const ChatContainer = ({
 	}, []);
 
 	return (
-		<ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-280px)] mb-4 p-4">
-			<div className="space-y-4">
+		<ScrollArea ref={scrollAreaRef} className="h-[100vh] px-4">
+			<div className="space-y-4 pt-16 pb-32">
 				{isLoadingSession ? (
 					<div className="flex items-center justify-center py-8">
 						<div className="text-muted-foreground">Loading session...</div>

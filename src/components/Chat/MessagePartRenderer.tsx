@@ -1,5 +1,6 @@
 import type { Part, ToolState } from "@opencode-ai/sdk/client";
 import {
+	BrainIcon,
 	CheckCircleIcon,
 	CheckIcon,
 	ChevronDownIcon,
@@ -9,6 +10,7 @@ import {
 	CodeIcon,
 	CopyIcon,
 	Edit3,
+	LightbulbIcon,
 	Loader2Icon,
 	XCircleIcon,
 } from "lucide-react";
@@ -677,7 +679,7 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 	switch (part.type) {
 		case "text":
 			return (
-				<div className="prose prose-sm max-w-none dark:prose-invert">
+				<div className="prose prose-sm max-w-prose dark:prose-invert">
 					<ReactMarkdown
 						components={{
 							...markdownComponents,
@@ -694,13 +696,21 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 
 		case "reasoning":
 			return (
-				<div className="border-l-4 border-primary pl-4 py-2 bg-accent rounded">
-					<div className="text-sm text-accent-foreground font-medium mb-1">
-						Reasoning
+				<div className="border-l-2 border-accent pl-4 relative prose max-w-prose prose-p:text-muted-foreground dark:prose-invert prose-sm">
+					<div className="text-sm text-accent-foreground font-medium">
+						<LightbulbIcon className="bg-background h-8 w-8 p-2 absolute -top-2 -left-4" /> Thought for {part.time.end && ((part.time.end - part.time.start) / 1000).toFixed(1)} seconds
 					</div>
-					<div className="text-sm text-accent-foreground/80 whitespace-pre-wrap">
+					<ReactMarkdown 
+						components={{
+							...markdownComponents,
+							// Prevent ReactMarkdown from wrapping our custom code block in an extra pre
+							pre({ children }) {
+								return <>{children}</>;
+							}
+						}}
+					>
 						{(part as any).text}
-					</div>
+					</ReactMarkdown>
 				</div>
 			);
 

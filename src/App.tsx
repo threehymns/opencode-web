@@ -4,12 +4,12 @@ import { ChatContainer } from "./components/Chat/ChatContainer";
 import { MessageInput } from "./components/Chat/MessageInput";
 import { NewSessionDialog } from "./components/NewSessionDialog";
 import { RightSidebar } from "./components/RightSidebar";
-import { SettingsPanel } from "./components/Settings/SettingsPanel";
 import { ThemeProvider } from "./components/theme-provider";
 import {
 	SidebarInset,
 	SidebarProvider,
 	SidebarTrigger,
+	useSidebar,
 } from "./components/ui/sidebar";
 import { useEventStream } from "./hooks/useEventStream";
 import { useMessageHandling } from "./hooks/useMessageHandling";
@@ -21,8 +21,8 @@ import { useSessionStore } from "./stores/sessionStore";
 import type { Todo } from "./stores/todoStore";
 import { useTodoStore } from "./stores/todoStore";
 import { DEFAULT_SETTINGS } from "./utils/constants";
-
-const MemoizedSettingsPanel = memo(SettingsPanel);
+import { PanelRightIcon } from "lucide-react";
+import { Button } from "./components/ui/button";
 
 function App() {
 	const [selectedMode, setSelectedMode] = useState<string>(
@@ -191,39 +191,42 @@ function App() {
 	return (
 		<ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
 			<SidebarProvider>
+				<SidebarInset>
+			<SidebarProvider>
 				<AppSidebar
 					onNewSession={handleNewSession}
 					onSelectSession={handleSelectSession}
 				/>
 				<SidebarInset>
-					<header className="flex h-16 shrink-0 items-center gap-2 px-4">
-						<SidebarTrigger className="-ml-1" />
+					<header className="fixed top-0 w-full px-3 z-10 flex h-12 shrink-0 items-center gap-2">
+						<SidebarTrigger />
 					</header>
-					<div className="flex flex-col flex-1 max-w-4xl p-4">
+					<div className="flex flex-col">
 						<ChatContainer isLoadingSession={isLoadingSession} />
 
-						<div className="space-y-2">
-							<MemoizedSettingsPanel
-								selectedMode={selectedMode}
-								onModeChange={setSelectedMode}
-							/>
+						<div className="fixed bottom-0 right-1/2 translate-x-1/2 z-10 px-4 w-xl space-y-2">
 
 							<MessageInput
 								onSubmit={onMessageSubmit}
 								disabled={isLoading || !currentSession || isCreatingSession}
 								isLoading={isLoading}
 								isInitializing={isCreatingSession}
+								selectedMode={selectedMode}
+								onModeChange={setSelectedMode}
 							/>
 						</div>
 					</div>
 				</SidebarInset>
 
-				<RightSidebar />
 
 				<NewSessionDialog
 					open={showNewSessionDialog}
 					onOpenChange={setShowNewSessionDialog}
 				/>
+			</SidebarProvider>
+			</SidebarInset>
+        <SidebarTrigger className="z-20 fixed right-2 top-2" side="right"/>
+				<RightSidebar />
 			</SidebarProvider>
 		</ThemeProvider>
 	);

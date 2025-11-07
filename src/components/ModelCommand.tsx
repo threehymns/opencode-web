@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useModelStore } from "../stores/modelStore";
 import {
 	Command,
@@ -7,20 +8,37 @@ import {
 	CommandItem,
 	CommandList,
 } from "./ui/command";
-// import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "./ui/button";
 
 export function ModelCommand() {
-	const { selectedModel, providers } = useModelStore();
+	const { selectedModel, providers, setSelectedModel, fetchProviders } = useModelStore();
+
+	useEffect(() => {
+		fetchProviders();
+	}, [fetchProviders]);
+
+		const getSelectedModelName = (modelKey: string): string => {
+		if (!providers) return modelKey;
+
+		for (const provider of providers.providers) {
+			const model = provider.models[modelKey];
+			if (model) {
+				return `${model.name}`;
+			}
+		}
+		return modelKey;
+	};
 
 	return (
 		<div className="flex items-center gap-1 text-xs text-muted-foreground">
-			{/* <Popover> */}
-				{/* <PopoverTrigger asChild> */}
-					<Button variant="outline" size="sm" className="h-8 w-8 p-0">
+			<Popover>
+				<PopoverTrigger asChild>
+					<Button variant="ghost" size="sm">
+						{getSelectedModelName(selectedModel)}
 					</Button>
-				{/* </PopoverTrigger> */}
-				{/* <PopoverContent className="w-[400px] p-0"> */}
+				</PopoverTrigger>
+				<PopoverContent className="w-[400px] p-0">
 					<Command>
 						<CommandInput placeholder="Select model..." />
 						<CommandList>
@@ -30,7 +48,7 @@ export function ModelCommand() {
 							.map((provider) => (
 								<CommandGroup key={provider.id} heading={provider.name}>
 									{Object.entries(provider.models || {}).map(([modelId, model]) => (
-										<CommandItem key={modelId} value={modelId}>
+										<CommandItem key={modelId} value={modelId} onSelect={() => setSelectedModel(modelId)}>
 											{model.name}
 										</CommandItem>
 									))}
@@ -38,7 +56,8 @@ export function ModelCommand() {
 							))}
 					</CommandList>
 				</Command>
-			{/* </Popover> */}
+			</PopoverContent>
+			</Popover>
 		</div>
 	);
 }
