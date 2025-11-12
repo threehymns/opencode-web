@@ -17,12 +17,11 @@ import {
 	SidebarMenu,
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSessionStore } from "@/stores/sessionStore";
-import { useTodoStore } from "@/stores/todoStore";
 import { getSessionDiff } from "@/services/api";
 import type { ChangedFile } from "@/services/types";
-
-
+import { useSessionStore } from "@/stores/sessionStore";
+import { useTodoStore } from "@/stores/todoStore";
+import { logger } from "@/lib/logger";
 
 export function RightSidebar() {
 	const { currentSession } = useSessionStore();
@@ -41,13 +40,13 @@ export function RightSidebar() {
 				return;
 			}
 			try {
-				const diff = await getSessionDiff(currentSession.id);
-				setChangedFiles(diff);
-			} catch (error) {
-				console.error("Failed to fetch session diff:", error);
-				setChangedFiles([]);
-			}
-		};
+					const diff = await getSessionDiff(currentSession.id);
+					setChangedFiles(diff);
+				} catch (error) {
+					logger.error("Failed to fetch session diff:", error);
+					setChangedFiles([]);
+				}
+			};
 		fetchDiff();
 	}, [currentSession]);
 
@@ -137,20 +136,28 @@ export function RightSidebar() {
 											<div className="flex-1 min-w-0">
 												<div className="text-sm font-medium truncate">
 													{(() => {
-														const lastSlashIndex = file.file.lastIndexOf('/');
+														const lastSlashIndex = file.file.lastIndexOf("/");
 														if (lastSlashIndex === -1) return file.file;
-														const dirPath = file.file.slice(0, lastSlashIndex + 1);
-														const fileName = file.file.slice(lastSlashIndex + 1);
+														const dirPath = file.file.slice(
+															0,
+															lastSlashIndex + 1,
+														);
+														const fileName = file.file.slice(
+															lastSlashIndex + 1,
+														);
 														return (
 															<>
-																<span className="text-muted-foreground">{dirPath}</span>
+																<span className="text-muted-foreground">
+																	{dirPath}
+																</span>
 																{fileName}
 															</>
 														);
 													})()}
 												</div>
 												<div className="text-xs text-muted-foreground">
-													<span className="text-green-500">+{file.added}</span> <span className="text-red-500">-{file.removed}</span>
+													<span className="text-green-500">+{file.added}</span>{" "}
+													<span className="text-red-500">-{file.removed}</span>
 												</div>
 											</div>
 										</SidebarMenuItem>

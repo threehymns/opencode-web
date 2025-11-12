@@ -1,4 +1,15 @@
+import { css } from "@codemirror/lang-css";
+import { html } from "@codemirror/lang-html";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import { python } from "@codemirror/lang-python";
+import { MergeView, unifiedMergeView } from "@codemirror/merge";
+import { EditorState } from "@codemirror/state";
+import { lineNumbers } from "@codemirror/view";
 import type { Part, ToolState } from "@opencode-ai/sdk/client";
+import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
+import { EditorView } from "codemirror";
 import {
 	CheckCircleIcon,
 	ChevronDownIcon,
@@ -13,21 +24,10 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { logger } from "@/lib/logger";
 import ReactMarkdown from "react-markdown";
-import { EditorView } from "codemirror";
-import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
-import { MergeView, unifiedMergeView } from "@codemirror/merge";
-import { lineNumbers } from "@codemirror/view";
-import { useTheme } from "../theme-provider";
-import { EditorState } from "@codemirror/state";
-import { javascript } from "@codemirror/lang-javascript";
-import { python } from "@codemirror/lang-python";
-import { json } from "@codemirror/lang-json";
-import { css } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-import { markdown } from "@codemirror/lang-markdown";
-
 import { CopyButton } from "../copy-button";
+import { useTheme } from "../theme-provider";
 
 interface TodoItem {
 	content: string;
@@ -42,224 +42,234 @@ interface MessagePartRendererProps {
 
 // Function to detect language from file path
 const getLanguageExtension = (filePath: string) => {
-	const extension = filePath.split('.').pop()?.toLowerCase();
+	const extension = filePath.split(".").pop()?.toLowerCase();
 	switch (extension) {
-		case 'js':
-		case 'jsx':
+		case "js":
+		case "jsx":
 			return javascript({ jsx: true });
-		case 'ts':
-		case 'tsx':
+		case "ts":
+		case "tsx":
 			return javascript({ typescript: true, jsx: true });
-		case 'py':
+		case "py":
 			return python();
-		case 'json':
+		case "json":
 			return json();
-		case 'css':
+		case "css":
 			return css();
-		case 'html':
+		case "html":
 			return html();
-		case 'md':
+		case "md":
 			return markdown();
 		default:
 			return null;
 	}
 };
 
-const EditRenderer: React.FC<{ state: ToolState; theme: string }> = memo(({ state, theme }) => {
-	const diffRef = useRef<HTMLDivElement>(null);
-	const [isDiffExpanded, setIsDiffExpanded] = useState(false);
+const EditRenderer: React.FC<{ state: ToolState; theme: string }> = memo(
+	({ state, theme }) => {
+		const diffRef = useRef<HTMLDivElement>(null);
+		const [isDiffExpanded, setIsDiffExpanded] = useState(false);
 
-	useEffect(() => {
-		const metadata = (state as any).metadata;
-				if (!isDiffExpanded || !diffRef.current || !metadata?.filediff?.before || !metadata?.filediff?.after || state.status !== "completed") {
-
-			return;
-		}
-
-		let view: EditorView | MergeView | null = null;
-		const container = diffRef.current;
-		const filePath = (state as any).input?.filePath || '';
-		const languageExtension = getLanguageExtension(filePath);
-
-		const sharedExtensions = [
-			theme === "dark" ? vscodeDark : vscodeLight,
-			lineNumbers(),
-			EditorView.lineWrapping,
-			EditorView.editable.of(false),
-			EditorState.readOnly.of(true),
-			EditorView.theme({'.cm-content': { backgroundColor: 'var(--card)' }, '.cm-gutter': { backgroundColor: 'var(--muted)' }, '.cm-gutters.cm-gutters-before': { borderColor: 'var(--border)' }, ".cm-lineWrapping": {wordBreak: "break-all"} } ),
-		];
-
-		if (languageExtension) {
-			sharedExtensions.push(languageExtension);
-		}
-
-		try {
-			if (container.offsetWidth >= 640) {
-				// Side-by-side for larger screens
-
-				view = new MergeView({
-					a: {
-						doc: metadata.filediff.before,
-						extensions: sharedExtensions,
-					},
-					b: {
-						doc: metadata.filediff.after,
-						extensions: sharedExtensions,
-					},
-					parent: container,
-					collapseUnchanged: { margin: 3, minSize: 2 },
-				});
-			} else {
-				// Unified for smaller screens
-				view = new EditorView({
-					parent: container,
-					doc: metadata.filediff.after,
-					extensions: [
-						...sharedExtensions,
-						EditorView.lineWrapping,
-						unifiedMergeView({
-							original: metadata.filediff.before,
-							mergeControls:false,
-							collapseUnchanged: { margin: 3, minSize: 2 },
-						}),
-					],
-				});
+		useEffect(() => {
+			const metadata = (state as any).metadata;
+			if (
+				!isDiffExpanded ||
+				!diffRef.current ||
+				!metadata?.filediff?.before ||
+				!metadata?.filediff?.after ||
+				state.status !== "completed"
+			) {
+				return;
 			}
 
-			// Force a resize event to ensure proper rendering
-			setTimeout(() => {
+			let view: EditorView | MergeView | null = null;
+			const container = diffRef.current;
+			const filePath = (state as any).input?.filePath || "";
+			const languageExtension = getLanguageExtension(filePath);
+
+			const sharedExtensions = [
+				theme === "dark" ? vscodeDark : vscodeLight,
+				lineNumbers(),
+				EditorView.lineWrapping,
+				EditorView.editable.of(false),
+				EditorState.readOnly.of(true),
+				EditorView.theme({
+					".cm-content": { backgroundColor: "var(--card)" },
+					".cm-gutter": { backgroundColor: "var(--muted)" },
+					".cm-gutters.cm-gutters-before": { borderColor: "var(--border)" },
+					".cm-lineWrapping": { wordBreak: "break-all" },
+				}),
+			];
+
+			if (languageExtension) {
+				sharedExtensions.push(languageExtension);
+			}
+
+			try {
+				if (container.offsetWidth >= 640) {
+					// Side-by-side for larger screens
+
+					view = new MergeView({
+						a: {
+							doc: metadata.filediff.before,
+							extensions: sharedExtensions,
+						},
+						b: {
+							doc: metadata.filediff.after,
+							extensions: sharedExtensions,
+						},
+						parent: container,
+						collapseUnchanged: { margin: 3, minSize: 2 },
+					});
+				} else {
+					// Unified for smaller screens
+					view = new EditorView({
+						parent: container,
+						doc: metadata.filediff.after,
+						extensions: [
+							...sharedExtensions,
+							EditorView.lineWrapping,
+							unifiedMergeView({
+								original: metadata.filediff.before,
+								mergeControls: false,
+								collapseUnchanged: { margin: 3, minSize: 2 },
+							}),
+						],
+					});
+				}
+
+				// Force a resize event to ensure proper rendering
+				setTimeout(() => {
+					if (view) {
+						const event = new Event("resize");
+						window.dispatchEvent(event);
+					}
+				}, 0);
+			} catch (error) {
+				logger.error("Error initializing diff view", error);
+			}
+
+			return () => {
 				if (view) {
-					const event = new Event('resize');
-					window.dispatchEvent(event);
+					try {
+						view.destroy();
+					} catch (e) {
+						logger.error("Error cleaning up diff view", e);
+					}
 				}
-			}, 0);
+			};
+		}, [state, theme, isDiffExpanded]);
 
-		} catch (error) {
-			console.error('Error initializing diff view:', error);
-		}
+		const renderStateContent = () => {
+			switch (state.status) {
+				case "pending":
+					return (
+						<div className="flex items-center gap-2 text-muted-foreground">
+							<ClockIcon className="h-4 w-4" />
+							<span className="text-sm">Preparing edit...</span>
+						</div>
+					);
 
-		return () => {
-			if (view) {
-				try {
-					view.destroy();
-				} catch (e) {
-					console.error('Error cleaning up diff view:', e);
+				case "running":
+					return (
+						<div className="flex items-center gap-2 text-primary">
+							<Loader2Icon className="h-4 w-4 animate-spin" />
+							<div className="flex-1">
+								<div className="text-sm font-medium">
+									{(state as any).title || "Applying edit"}
+								</div>
+							</div>
+						</div>
+					);
+
+				case "completed": {
+					const output = (state as any).output;
+					if (output && typeof output === "object") {
+					if (output.diagnostics) {
+						logger.debug("Edit tool diagnostics", output.diagnostics);
+					}
+					if (output.filediff) {
+						logger.debug("Edit tool filediff", output.filediff);
+					}
+					}
+					return (
+						<button
+							className="space-y-2 w-full items-center"
+							type="button"
+							onClick={() => setIsDiffExpanded(!isDiffExpanded)}
+						>
+							<div className="flex items-center justify-between text-primary">
+								<div className="flex items-center gap-2">
+									<Edit3 className="h-4 w-4" />
+									<span className="text-sm font-medium">
+										Edited {(() => {
+											const path = (state as any).input.filePath;
+											const lastSlashIndex = path.lastIndexOf("/");
+											if (lastSlashIndex === -1) return path;
+											return (
+												<>
+													<span className="text-muted-foreground truncate">
+														{path.substring(0, lastSlashIndex + 1)}
+													</span>
+													{path.substring(lastSlashIndex + 1)}
+												</>
+											);
+										})()}
+									</span>
+								</div>
+								<div className="flex items-center gap-2">
+									<span className="text-xs text-green-500">
+										+{(state as any).metadata.filediff?.additions}
+									</span>
+									<span className="text-xs text-red-500">
+										-{(state as any).metadata.filediff?.deletions}
+									</span>
+									{isDiffExpanded ? (
+										<ChevronDownIcon className="h-3 w-3" />
+									) : (
+										<ChevronRightIcon className="h-3 w-3" />
+									)}
+								</div>
+							</div>
+							{isDiffExpanded && (
+								<div
+									ref={diffRef}
+									className="mt-2 w-full text-sm text-start"
+								></div>
+							)}
+						</button>
+					);
 				}
+
+				case "error":
+					return (
+						<div className="space-y-2">
+							<div className="flex items-center gap-2 text-destructive">
+								<XCircleIcon className="h-4 w-4" />
+								<span className="text-sm font-medium">Edit failed</span>
+							</div>
+							<div className="bg-destructive/10 rounded p-3 border-l-4 border-destructive">
+								<pre className="text-xs whitespace-pre-wrap font-mono text-destructive">
+									{(state as any).error}
+								</pre>
+							</div>
+						</div>
+					);
+
+				default:
+					return (
+						<div className="text-sm text-muted-foreground">Unknown state</div>
+					);
 			}
 		};
-	}, [state, theme, isDiffExpanded]);
 
-	const renderStateContent = () => {
-		switch (state.status) {
-      case "pending":
-        return (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <ClockIcon className="h-4 w-4" />
-            <span className="text-sm">Preparing edit...</span>
-          </div>
-        );
-
-      case "running":
-        return (
-          <div className="flex items-center gap-2 text-primary">
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-            <div className="flex-1">
-              <div className="text-sm font-medium">
-                {(state as any).title || "Applying edit"}
-              </div>
-            </div>
-          </div>
-        );
-
-      case "completed": {
-        const output = (state as any).output;
-        if (output && typeof output === "object") {
-          if (output.diagnostics)
-            console.log("Diagnostics:", output.diagnostics);
-          if (output.filediff) console.log("File diff:", output.filediff);
-        }
-        return (
-          <button
-            className="space-y-2 w-full items-center"
-            type="button"
-            onClick={() => setIsDiffExpanded(!isDiffExpanded)}
-          >
-            <div className="flex items-center justify-between text-primary">
-              <div className="flex items-center gap-2">
-                <Edit3 className="h-4 w-4" />
-                 <span className="text-sm font-medium">
-                   Edited{" "}
-                   {(() => {
-                     const path = (state as any).input.filePath;
-                     const lastSlashIndex = path.lastIndexOf("/");
-                     if (lastSlashIndex === -1) return path;
-                     return (
-                       <>
-                         <span className="text-muted-foreground truncate">
-                           {path.substring(0, lastSlashIndex + 1)}
-                         </span>
-                         {path.substring(lastSlashIndex + 1)}
-                       </>
-                     );
-                   })()}
-                 </span>
-              </div>
-              <div className="flex items-center gap-2">
-                 <span className="text-xs text-green-500">
-                   +{(state as any).metadata.filediff?.additions}
-                 </span>
-                 <span className="text-xs text-red-500">
-                   -{(state as any).metadata.filediff?.deletions}
-                 </span>
-                {isDiffExpanded ? (
-                  <>
-                    <ChevronDownIcon className="h-3 w-3" />
-                  </>
-                ) : (
-                  <>
-                    <ChevronRightIcon className="h-3 w-3" />
-                  </>
-                )}
-              </div>
-            </div>
-            {isDiffExpanded && (
-              <div
-                ref={diffRef}
-                className="mt-2 w-full text-sm text-start"
-              >
-              </div>
-            )}
-          </button>
-        );
-      }
-
-      case "error":
-        return (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-destructive">
-              <XCircleIcon className="h-4 w-4" />
-              <span className="text-sm font-medium">Edit failed</span>
-            </div>
-            <div className="bg-destructive/10 rounded p-3 border-l-4 border-destructive">
-              <pre className="text-xs whitespace-pre-wrap font-mono text-destructive">
-                {(state as any).error}
-              </pre>
-            </div>
-          </div>
-        );
-
-      default:
-        return (
-          <div className="text-sm text-muted-foreground">Unknown state</div>
-        );
-    }
-	};
-
-	return (
-		<div className="border rounded-lg p-3 bg-card flex items-center">{renderStateContent()}</div>
-	);
-});
+		return (
+			<div className="border rounded-lg p-3 bg-card flex items-center">
+				{renderStateContent()}
+			</div>
+		);
+	},
+);
 
 const TodoRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 	const getStatusIcon = useCallback((status: TodoItem["status"]) => {
@@ -299,10 +309,10 @@ const TodoRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 				} else if (parsed && Array.isArray(parsed.todos)) {
 					todos = parsed.todos;
 				}
-			} catch (e) {
-				console.warn("Failed to parse todo output:", e);
-			}
-		} else if (
+				} catch (e) {
+					logger.warn("Failed to parse todo output", e);
+				}
+			} else if (
 			output &&
 			typeof output === "object" &&
 			Array.isArray((output as any).todos)
@@ -482,17 +492,14 @@ const ToolStateRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 											<div className="text-xs text-muted-foreground">
 												Attachments:
 											</div>
-											{(state as any).attachments.map(
-												(attachment: any) => (
-													<div
-														key={attachment.filename || attachment.mime}
-														className="text-xs bg-accent p-2 rounded"
-													>
-														📎 {attachment.filename || "File"} (
-														{attachment.mime})
-													</div>
-												),
-											)}
+											{(state as any).attachments.map((attachment: any) => (
+												<div
+													key={attachment.filename || attachment.mime}
+													className="text-xs bg-accent p-2 rounded"
+												>
+													📎 {attachment.filename || "File"} ({attachment.mime})
+												</div>
+											))}
 										</div>
 									)}
 							</div>
@@ -541,114 +548,114 @@ const ToolStateRenderer: React.FC<{ state: ToolState }> = memo(({ state }) => {
 });
 
 const getLanguageExtensionByName = (language: string | undefined) => {
-  if (!language) {
-    return undefined;
-  }
-  const normalized = language.toLowerCase();
-  switch (normalized) {
-    case "js":
-    case "jsx":
-    case "javascript":
-      return javascript({ jsx: true });
-    case "ts":
-    case "tsx":
-    case "typescript":
-      return javascript({ typescript: true, jsx: true });
-    case "py":
-    case "python":
-      return python();
-    case "json":
-      return json();
-    case "css":
-      return css();
-    case "html":
-      return html();
-    case "md":
-    case "markdown":
-      return markdown();
-    default:
-      return undefined;
-  }
+	if (!language) {
+		return undefined;
+	}
+	const normalized = language.toLowerCase();
+	switch (normalized) {
+		case "js":
+		case "jsx":
+		case "javascript":
+			return javascript({ jsx: true });
+		case "ts":
+		case "tsx":
+		case "typescript":
+			return javascript({ typescript: true, jsx: true });
+		case "py":
+		case "python":
+			return python();
+		case "json":
+			return json();
+		case "css":
+			return css();
+		case "html":
+			return html();
+		case "md":
+		case "markdown":
+			return markdown();
+		default:
+			return undefined;
+	}
 };
 
 const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
-  part,
+	part,
 }) => {
-  const { resolvedTheme } = useTheme();
+	const { resolvedTheme } = useTheme();
 
-  const markdownComponents = useMemo(
-    () => ({
-      code({
-        inline,
-        className,
-        children,
-        ...props
-      }: {
-        inline?: boolean;
-        className?: string;
-        children?: React.ReactNode;
-      }) {
-        const match = /language-([\w-]+)/.exec(className || "");
-        const language = match?.[1];
+	const markdownComponents = useMemo(
+		() => ({
+			code({
+				inline,
+				className,
+				children,
+				...props
+			}: {
+				inline?: boolean;
+				className?: string;
+				children?: React.ReactNode;
+			}) {
+				const match = /language-([\w-]+)/.exec(className || "");
+				const language = match?.[1];
 
-        if (!inline && language) {
-          const langExtension = getLanguageExtensionByName(language);
+				if (!inline && language) {
+					const langExtension = getLanguageExtensionByName(language);
 
-          const codeText =
-            typeof children === "string"
-              ? children
-              : Array.isArray(children)
-              ? children.join("")
-              : String(children ?? "");
+					const codeText =
+						typeof children === "string"
+							? children
+							: Array.isArray(children)
+								? children.join("")
+								: String(children ?? "");
 
-          const extensions = [
-            resolvedTheme === "dark" ? vscodeDark : vscodeLight,
-            lineNumbers(),
-            EditorView.lineWrapping,
-            EditorView.editable.of(false),
-            EditorState.readOnly.of(true),
-            EditorView.theme(
-              {
-                ".cm-editor": {
-                  backgroundColor: "var(--card)",
-                  borderRadius: "0.375rem",
-                },
-                ".cm-content": {
-                  backgroundColor: "var(--card)",
-                },
-                ".cm-scroller": {
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                },
-                ".cm-gutters": {
-                  backgroundColor: "var(--muted)",
-                  borderRight: "1px solid var(--border)",
-                  color: "var(--muted-foreground)",
-                },
-              },
-              { dark: resolvedTheme === "dark" },
-            ),
-            ...(langExtension ? [langExtension] : []),
-          ];
+					const extensions = [
+						resolvedTheme === "dark" ? vscodeDark : vscodeLight,
+						lineNumbers(),
+						EditorView.lineWrapping,
+						EditorView.editable.of(false),
+						EditorState.readOnly.of(true),
+						EditorView.theme(
+							{
+								".cm-editor": {
+									backgroundColor: "var(--card)",
+									borderRadius: "0.375rem",
+								},
+								".cm-content": {
+									backgroundColor: "var(--card)",
+								},
+								".cm-scroller": {
+									fontFamily:
+										'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+								},
+								".cm-gutters": {
+									backgroundColor: "var(--muted)",
+									borderRight: "1px solid var(--border)",
+									color: "var(--muted-foreground)",
+								},
+							},
+							{ dark: resolvedTheme === "dark" },
+						),
+						...(langExtension ? [langExtension] : []),
+					];
 
-          const state = EditorState.create({
-            doc: codeText.replace(/\n$/, ""),
-            extensions,
-          });
+					const state = EditorState.create({
+						doc: codeText.replace(/\n$/, ""),
+						extensions,
+					});
 
-          const attachRef = (node: HTMLDivElement | null) => {
-            if (!node) return;
-            while (node.firstChild) {
-              node.removeChild(node.firstChild);
-            }
-            new EditorView({
-              state,
-              parent: node,
-            });
-          };
+					const attachRef = (node: HTMLDivElement | null) => {
+						if (!node) return;
+						while (node.firstChild) {
+							node.removeChild(node.firstChild);
+						}
+						new EditorView({
+							state,
+							parent: node,
+						});
+					};
 
-          return (
-            <div className="mt-2 overflow-clip rounded-md border bg-card max-w-prose">
+					return (
+						<div className="mt-2 overflow-clip rounded-md border bg-card max-w-prose">
 							<header className="sticky top-0 z-10 flex items-center justify-between gap-2 p-1 bg-background/90 backdrop-blur border-b border-border/50">
 								<div className="ml-1 flex items-center gap-2 text-sm font-medium text-muted-foreground">
 									<CodeIcon className="h-4 w-4" />
@@ -656,23 +663,23 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 								</div>
 								<CopyButton value={codeText} />
 							</header>
-              <div ref={attachRef} />
-            </div>
-          );
-        }
+							<div ref={attachRef} />
+						</div>
+					);
+				}
 
-        return (
-          <code
-            className={`bg-muted px-1.5 py-0.5 rounded text-sm font-mono ${className ?? ""}`}
-            {...props}
-          >
-            {children}
-          </code>
-        );
-      },
-    }),
-    [resolvedTheme],
-  );
+				return (
+					<code
+						className={`bg-muted px-1.5 py-0.5 rounded text-sm font-mono ${className ?? ""}`}
+						{...props}
+					>
+						{children}
+					</code>
+				);
+			},
+		}),
+		[resolvedTheme],
+	);
 
 	switch (part.type) {
 		case "text":
@@ -696,15 +703,19 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 			return (
 				<div className="border-l-2 border-accent pl-4 relative prose max-w-prose prose-p:text-muted-foreground dark:prose-invert prose-sm">
 					<div className="text-sm text-accent-foreground font-medium">
-						<LightbulbIcon className="bg-background h-8 w-8 p-2 absolute -top-2 -left-4" /> Thought for {part.time.end && ((part.time.end - part.time.start) / 1000).toFixed(1)} seconds
+						<LightbulbIcon className="bg-background h-8 w-8 p-2 absolute -top-2 -left-4" />{" "}
+						Thought for{" "}
+						{part.time.end &&
+							((part.time.end - part.time.start) / 1000).toFixed(1)}{" "}
+						seconds
 					</div>
-					<ReactMarkdown 
+					<ReactMarkdown
 						components={{
 							...markdownComponents,
 							// Prevent ReactMarkdown from wrapping our custom code block in an extra pre
 							pre({ children }) {
 								return <>{children}</>;
-							}
+							},
 						}}
 					>
 						{(part as any).text}
@@ -714,9 +725,6 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 
 		case "tool": {
 			const toolName = (part as any).tool;
-			if (toolName === "edit") {
-				console.log("Rendering edit tool part:", part);
-			}
 			return (
 				<div className="space-y-2">
 					{toolName === "todowrite" ? (
@@ -724,8 +732,8 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 					) : toolName === "edit" ? (
 						<EditRenderer state={(part as any).state} theme={resolvedTheme} />
 					) : (
-					  <>
-					    <div className="text-sm font-medium text-muted-foreground">
+						<>
+							<div className="text-sm font-medium text-muted-foreground">
 								Tool: {toolName}
 							</div>
 							<ToolStateRenderer state={(part as any).state} />
@@ -793,7 +801,7 @@ const MessagePartRendererComponent: React.FC<MessagePartRendererProps> = ({
 				// 		</div>
 				// 	</div>
 				// </div>
-        null
+				null
 			);
 
 		default:
@@ -814,7 +822,10 @@ const areEqual = (
 	if (prev.id !== next.id || prev.type !== next.type) return false;
 	if (prev.type === "text" && (prev as any).text !== (next as any).text)
 		return false;
-	if (prev.type === "tool" && (prev as any).state?.status !== (next as any).state?.status)
+	if (
+		prev.type === "tool" &&
+		(prev as any).state?.status !== (next as any).state?.status
+	)
 		return false;
 	// For other types, assume they don't change content often
 	return true;

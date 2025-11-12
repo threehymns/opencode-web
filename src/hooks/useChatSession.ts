@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from "../utils/constants";
 // import { useMessageStore } from '../stores/messageStore'
 import { useEventStream } from "./useEventStream";
 import { useMessageHandling } from "./useMessageHandling";
+import { logger } from "../lib/logger";
 
 export function useChatSession() {
 	const [selectedMode, setSelectedMode] = useState<string>(
@@ -35,14 +36,14 @@ export function useChatSession() {
 	useEffect(() => {
 		if (sessionError) {
 			// TODO: Handle error display with messageStoreV2
-			console.error("Session error:", sessionError);
+			logger.error("Session error:", sessionError);
 		}
 	}, [sessionError]);
 
 	const submitMessage = useCallback(
 		async (userInput: string) => {
 			if (!currentSession) {
-				console.error("No current session selected");
+				logger.error("No current session selected");
 				return;
 			}
 

@@ -60,7 +60,9 @@ export const useMessageStore = create<MessageStoreState>((set) => ({
 				return state;
 			}
 			const message = state.messages[messageIndex];
-			const existingPartIndex = message.parts.findIndex((p) => p.id === part.id);
+			const existingPartIndex = message.parts.findIndex(
+				(p) => p.id === part.id,
+			);
 			if (
 				existingPartIndex !== -1 &&
 				message.parts[existingPartIndex] === part

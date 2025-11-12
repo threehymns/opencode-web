@@ -10,18 +10,21 @@ type ThemeProviderProps = {
 
 type ThemeProviderState = {
 	theme: Theme;
-	resolvedTheme: 'light' | 'dark';
+	resolvedTheme: "light" | "dark";
 	setTheme: (theme: Theme) => void;
 };
 
-const getResolvedTheme = (currentTheme: Theme = 'system') => 
-  currentTheme === 'system' 
-    ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : currentTheme;
+const getResolvedTheme = (currentTheme: Theme = "system") =>
+	currentTheme === "system"
+		? typeof window !== "undefined" &&
+			window.matchMedia("(prefers-color-scheme: dark)").matches
+			? "dark"
+			: "light"
+		: currentTheme;
 
 const initialState: ThemeProviderState = {
 	theme: "system",
-	resolvedTheme: getResolvedTheme('system'),
+	resolvedTheme: getResolvedTheme("system"),
 	setTheme: () => null,
 };
 
@@ -34,42 +37,44 @@ export function ThemeProvider({
 	...props
 }: ThemeProviderProps) {
 	const [theme, setTheme] = useState<Theme>(
-  () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
-);
+		() => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
+	);
 
-const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(getResolvedTheme);
+	const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(
+		getResolvedTheme,
+	);
 
-useEffect(() => {
-  const root = window.document.documentElement;
-  root.classList.remove("light", "dark");
+	useEffect(() => {
+		const root = window.document.documentElement;
+		root.classList.remove("light", "dark");
 
-  const updateTheme = () => {
-    const newResolvedTheme = theme === "system" ? getResolvedTheme() : theme;
-    root.classList.add(newResolvedTheme);
-    setResolvedTheme(newResolvedTheme);
-  };
+		const updateTheme = () => {
+			const newResolvedTheme = theme === "system" ? getResolvedTheme() : theme;
+			root.classList.add(newResolvedTheme);
+			setResolvedTheme(newResolvedTheme);
+		};
 
-  updateTheme();
+		updateTheme();
 
-  // Listen for system theme changes
-  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  const handleChange = () => {
-    if (theme === "system") {
-      updateTheme();
-    }
-  };
+		// Listen for system theme changes
+		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+		const handleChange = () => {
+			if (theme === "system") {
+				updateTheme();
+			}
+		};
 
-  mediaQuery.addEventListener("change", handleChange);
-  return () => mediaQuery.removeEventListener("change", handleChange);
-}, [theme]);
+		mediaQuery.addEventListener("change", handleChange);
+		return () => mediaQuery.removeEventListener("change", handleChange);
+	}, [theme]);
 
-const value = {
-  theme,
-  resolvedTheme,
-  setTheme: (newTheme: Theme) => {
-    localStorage.setItem(storageKey, newTheme);
-    setTheme(newTheme);
-  },
+	const value = {
+		theme,
+		resolvedTheme,
+		setTheme: (newTheme: Theme) => {
+			localStorage.setItem(storageKey, newTheme);
+			setTheme(newTheme);
+		},
 	};
 
 	return (

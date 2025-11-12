@@ -252,7 +252,6 @@ function Sidebar({
 	);
 }
 
-
 type SidebarTriggerProps = React.ComponentProps<typeof Button> & {
 	side?: "left" | "right";
 };

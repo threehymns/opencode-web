@@ -60,7 +60,7 @@ export const ChatContainer = ({
 				scrollContainer.scrollTop = scrollContainer.scrollHeight;
 			}
 		}
-	}, [messages.length]);
+	}, []);
 
 	return (
 		<ScrollArea ref={scrollAreaRef} className="h-[100vh] px-4">

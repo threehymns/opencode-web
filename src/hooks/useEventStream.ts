@@ -136,7 +136,13 @@ export function useEventStream() {
 		return () => {
 			eventStream.disconnect();
 		};
-	}, [eventStream]);
+	}, [
+		eventStream,
+		handleMessageRemoved, // Update messageStoreV2 with the new message
+		handleMessageUpdated, // Update messageStoreV2 with the new part
+		handlePartUpdated,
+		hasReceivedFirstEvent,
+	]);
 
 	return {
 		hasReceivedFirstEvent,

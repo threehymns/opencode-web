@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import type { Project } from "@/services/types";
 import { useSessionStore } from "@/stores/sessionStore";
 import { ProjectSelector } from "./ProjectSelector";
+import { logger } from "@/lib/logger";
 
 interface NewSessionDialogProps {
 	open: boolean;
@@ -36,7 +37,7 @@ export function NewSessionDialog({
 			setSelectedProject(null);
 			onOpenChange(false);
 		} catch (error) {
-			console.error("Failed to create session:", error);
+			logger.error("Failed to create session:", error);
 		}
 	};
 

@@ -10,10 +10,16 @@ import {
 	useState,
 } from "react";
 import Textarea from "react-textarea-autosize";
+import { MODE_LABELS } from "@/utils/constants";
 import { ModelCommand } from "../ModelCommand";
 import { Button } from "../ui/button";
-import { MODE_LABELS } from "@/utils/constants";
-import { Command, CommandItem, CommandList, CommandInput, CommandEmpty } from "../ui/command";
+import {
+	Command,
+	CommandEmpty,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "../ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 interface MessageInputProps {
@@ -76,10 +82,10 @@ export function MessageInput({
 	}
 
 	return (
-		<form className="w-full" onSubmit={handleSubmit}>
-			<div className="flex gap-2">
+		<form className="" onSubmit={handleSubmit}>
+			<div className="flex gap-2 justify-center">
 				{/* Text input */}
-				<div className="flex-1 relative flex flex-col w-full rounded-xl border border-input bg-background p-1.5 text-sm ring-offset-background placeholder:text-muted-foreground ">
+				<div className="flex-1 relative flex flex-col w-full rounded-xl border border-input bg-background p-1.5 text-sm ring-offset-background placeholder:text-muted-foreground max-w-xl">
 					<Textarea
 						ref={inputRef}
 						value={input}
@@ -92,30 +98,40 @@ export function MessageInput({
 					/>
 					<div className="flex items-center justify-between pt-2">
 						<div className="flex">
-						<ModelCommand />
-						<Popover>
-							<PopoverTrigger asChild>
-								<Button variant="ghost" size="sm" className="text-muted-foreground">
-									{selectedMode}
-								</Button>
-							</PopoverTrigger>
-						<PopoverContent className="p-0 w-fit">
-							<Command className="w-48">
-								<CommandInput placeholder="Select mode..." />
-								<CommandList>
-									<CommandEmpty>No modes found.</CommandEmpty>
-									{Object.entries(MODE_LABELS).map(([value, label]) => (
-										<CommandItem key={value} value={value} onSelect={() => { 
-											document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-											onModeChange(value);
-										}}>
-											{label}
-										</CommandItem>
-									))}
-								</CommandList>
-							</Command>
-					</PopoverContent>
-				</Popover>
+							<ModelCommand />
+							<Popover>
+								<PopoverTrigger asChild>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="text-muted-foreground"
+									>
+										{selectedMode}
+									</Button>
+								</PopoverTrigger>
+								<PopoverContent className="p-0 w-fit">
+									<Command className="w-48">
+										<CommandInput placeholder="Select mode..." />
+										<CommandList>
+											<CommandEmpty>No modes found.</CommandEmpty>
+											{Object.entries(MODE_LABELS).map(([value, label]) => (
+												<CommandItem
+													key={value}
+													value={value}
+													onSelect={() => {
+														document.dispatchEvent(
+															new KeyboardEvent("keydown", { key: "Escape" }),
+														);
+														onModeChange(value);
+													}}
+												>
+													{label}
+												</CommandItem>
+											))}
+										</CommandList>
+									</Command>
+								</PopoverContent>
+							</Popover>
 						</div>
 						{/* Submit button */}
 						<Button

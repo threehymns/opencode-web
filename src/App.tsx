@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppSidebar } from "./components/AppSidebar";
 import { ChatContainer } from "./components/Chat/ChatContainer";
 import { MessageInput } from "./components/Chat/MessageInput";
@@ -9,7 +9,6 @@ import {
 	SidebarInset,
 	SidebarProvider,
 	SidebarTrigger,
-	useSidebar,
 } from "./components/ui/sidebar";
 import { useEventStream } from "./hooks/useEventStream";
 import { useMessageHandling } from "./hooks/useMessageHandling";
@@ -21,8 +20,7 @@ import { useSessionStore } from "./stores/sessionStore";
 import type { Todo } from "./stores/todoStore";
 import { useTodoStore } from "./stores/todoStore";
 import { DEFAULT_SETTINGS } from "./utils/constants";
-import { PanelRightIcon } from "lucide-react";
-import { Button } from "./components/ui/button";
+import { logger } from "./lib/logger";
 
 function App() {
 	const [selectedMode, setSelectedMode] = useState<string>(
@@ -66,7 +64,7 @@ function App() {
 					const messages = await getSessionMessages(currentSession.id);
 					hydrateFromSession(messages);
 				} catch (error) {
-					console.error("Failed to load current session messages:", error);
+					logger.error("Failed to load current session messages", error);
 					hydrateFromSession([]);
 				}
 			};
@@ -122,9 +120,11 @@ function App() {
 							todos.forEach((todo) => addTodo(todo));
 							lastProcessedIndex.current = i;
 							return; // Stop after finding the most recent
-						} catch (error) {
-							console.error("Failed to parse todos from tool call:", error);
-						}
+					} catch (error) {
+						logger.error("Failed to parse todos from tool call", error);
+					}
+
+
 					}
 				}
 			}
@@ -135,8 +135,9 @@ function App() {
 	useEffect(() => {
 		if (sessionError) {
 			// TODO: Handle error display with messageStoreV2
-			console.error("Session error:", sessionError);
+			logger.error("Session error:", sessionError);
 		}
+
 	}, [sessionError]);
 
 	const onMessageSubmit = useCallback(
@@ -175,12 +176,13 @@ function App() {
 			hydrateFromSession([]);
 
 			// Load messages for the selected session
-			try {
-				const sessionMessages = await getSessionMessages(session.id);
-				hydrateFromSession(sessionMessages);
-			} catch (error) {
-				console.error("Failed to load session messages:", error);
-				// On error, keep messages cleared but log the error
+				try {
+					const sessionMessages = await getSessionMessages(session.id);
+					hydrateFromSession(sessionMessages);
+				} catch (error) {
+					logger.error("Failed to load session messages", error);
+					// On error, keep messages cleared but log the error
+
 				// The UI will show empty state appropriately
 			} finally {
 				setIsLoadingSession(false);
@@ -192,40 +194,38 @@ function App() {
 		<ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
 			<SidebarProvider>
 				<SidebarInset>
-			<SidebarProvider>
-				<AppSidebar
-					onNewSession={handleNewSession}
-					onSelectSession={handleSelectSession}
-				/>
-				<SidebarInset>
-					<header className="fixed top-0 w-full px-3 z-10 flex h-12 shrink-0 items-center gap-2">
-						<SidebarTrigger />
-					</header>
-					<div className="flex flex-col">
-						<ChatContainer isLoadingSession={isLoadingSession} />
+					<SidebarProvider>
+						<AppSidebar
+							onNewSession={handleNewSession}
+							onSelectSession={handleSelectSession}
+						/>
+						<SidebarInset>
+							<header className="fixed top-0 w-full px-3 z-10 flex h-12 shrink-0 items-center gap-2">
+								<SidebarTrigger />
+							</header>
+							<div className="flex flex-col relative max-h-screen overflow-hidden">
+								<ChatContainer isLoadingSession={isLoadingSession} />
 
-						<div className="fixed bottom-0 right-1/2 translate-x-1/2 z-10 px-4 w-xl space-y-2">
+								<div className="absolute bottom-0 w-full z-10 px-4 mb-1 max-w-full space-y-2">
+									<MessageInput
+										onSubmit={onMessageSubmit}
+										disabled={isLoading || !currentSession || isCreatingSession}
+										isLoading={isLoading}
+										isInitializing={isCreatingSession}
+										selectedMode={selectedMode}
+										onModeChange={setSelectedMode}
+									/>
+								</div>
+							</div>
+						</SidebarInset>
 
-							<MessageInput
-								onSubmit={onMessageSubmit}
-								disabled={isLoading || !currentSession || isCreatingSession}
-								isLoading={isLoading}
-								isInitializing={isCreatingSession}
-								selectedMode={selectedMode}
-								onModeChange={setSelectedMode}
-							/>
-						</div>
-					</div>
+						<NewSessionDialog
+							open={showNewSessionDialog}
+							onOpenChange={setShowNewSessionDialog}
+						/>
+					</SidebarProvider>
 				</SidebarInset>
-
-
-				<NewSessionDialog
-					open={showNewSessionDialog}
-					onOpenChange={setShowNewSessionDialog}
-				/>
-			</SidebarProvider>
-			</SidebarInset>
-        <SidebarTrigger className="z-20 fixed right-2 top-2" side="right"/>
+				<SidebarTrigger className="z-20 fixed right-2 top-2" side="right" />
 				<RightSidebar />
 			</SidebarProvider>
 		</ThemeProvider>
@@ -233,3 +233,4 @@ function App() {
 }
 
 export default App;
+
